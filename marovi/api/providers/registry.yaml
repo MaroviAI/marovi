@@ -1,0 +1,112 @@
+# Provider Registry Configuration
+# This file defines all available providers and their capabilities
+
+providers:
+  # OpenAI provider
+  openai:
+    name: "OpenAI"
+    description: "OpenAI API provider for GPT models"
+    services:
+      - type: "llm"
+        implementation: "marovi.api.providers.openai.OpenAIProvider"
+        default_model: "gpt-4o-2024-08-06"
+        models:
+          - name: "gpt-4o-2024-08-06"
+            max_tokens: 128000
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "gpt-4o-mini-2024-07-18"
+            max_tokens: 128000
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "gpt-4-turbo-2024-04-09"
+            max_tokens: 128000
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "gpt-3.5-turbo-0125"
+            max_tokens: 16385
+            supports_streaming: true
+            supports_json_mode: true
+    env_vars:
+      - "OPENAI_API_KEY"
+    docs_url: "https://platform.openai.com/docs/api-reference"
+
+  # Anthropic provider
+  anthropic:
+    name: "Anthropic"
+    description: "Anthropic API provider for Claude models"
+    services:
+      - type: "llm"
+        implementation: "marovi.api.providers.anthropic.AnthropicProvider"
+        default_model: "claude-3-sonnet-20240229"
+        models:
+          - name: "claude-3-opus-20240229"
+            max_tokens: 200000
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "claude-3-sonnet-20240229" 
+            max_tokens: 200000
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "claude-3-haiku-20240307"
+            max_tokens: 200000
+            supports_streaming: true
+            supports_json_mode: true
+    env_vars:
+      - "ANTHROPIC_API_KEY"
+    docs_url: "https://docs.anthropic.com/claude/reference"
+
+  # Google provider (supports multiple services)
+  google:
+    name: "Google"
+    description: "Google AI & Translation services"
+    services:
+      - type: "translation"
+        implementation: "marovi.api.providers.google.GoogleTranslateProvider"
+        features:
+          - "batch_translation"
+          - "language_detection"
+          - "glossary_support"
+      - type: "llm"
+        implementation: "marovi.api.providers.google.GeminiProvider"
+        default_model: "gemini-1.5-pro"
+        models:
+          - name: "gemini-1.5-pro"
+            max_tokens: 32768
+            supports_streaming: true
+            supports_json_mode: true
+          - name: "gemini-1.5-flash"
+            max_tokens: 32768
+            supports_streaming: true
+            supports_json_mode: true
+    env_vars:
+      - "GOOGLE_API_KEY"
+      - "GOOGLE_TRANSLATE_API_KEY"
+    docs_url: "https://cloud.google.com/translate/docs/reference/rest"
+
+  # DeepL provider
+  deepl:
+    name: "DeepL"
+    description: "DeepL Translation API"
+    services:
+      - type: "translation"
+        implementation: "marovi.api.providers.deepl.DeepLProvider"
+        features:
+          - "batch_translation"
+          - "formality_control"
+          - "document_translation"
+    env_vars:
+      - "DEEPL_API_KEY"
+    docs_url: "https://www.deepl.com/docs-api"
+
+  # Custom providers
+  custom:
+    name: "Custom"
+    description: "Custom implementations"
+    services:
+      - type: "translation"
+        implementation: "marovi.api.providers.custom.ChatGPTTranslationProvider"
+        description: "Translation provider that uses ChatGPT for translation"
+        requires:
+          - type: "llm"
+            provider: "openai" 
