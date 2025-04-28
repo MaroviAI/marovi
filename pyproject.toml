@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "marovi"
+version = "0.1.0"
+description = "Multilingual AI, Benchmarks, & LLM-Enhanced Content"
+authors = ["Felipe Felix Arias <felipefelixarias@gmail.com>"]
+license = "Apache 2.0 with Contributor Assignment"
+readme = "README.md"
+packages = [{ include = "marovi" }] 
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+openai = "^1.43.0"
+langchain = "^0.2.15"
+deepl = "^1.18.0"
+jupyter = "^1.1.1"
+pydantic = "^2.8.2"
+notebook = "^7.2.2"
+ipykernel = "^6.29.5"
+feedparser = "^6.0.11"
+pandas = "^2.2.3"
+polib = "^1.2.0"
+anthropic = "^0.49.0"
+dotenv = "^0.9.9"
+google = "^3.0.0"
+requests = "^2.32.3"
+google-generativeai = "^0.8.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api" 

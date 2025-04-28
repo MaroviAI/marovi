@@ -6,8 +6,16 @@ This module provides schema classes specific to LLM services.
 
 from typing import Dict, Optional, List, Any, Union
 from pydantic import BaseModel, Field
+from enum import Enum
 
 from .base import BaseRequest, BaseResponse, BatchRequest, BatchResponse
+
+class ProviderType(str, Enum):
+    """Supported provider types."""
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    LLAMA = "llama"
+    CUSTOM = "custom"
 
 class LLMRequest(BaseRequest):
     """Schema for LLM completion requests."""

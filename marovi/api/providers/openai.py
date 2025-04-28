@@ -14,7 +14,7 @@ import openai
 from openai import OpenAI, AsyncOpenAI
 from pydantic import BaseModel
 
-from .....MaroviPipelines.marovipipelines.llm.schemas import LLMRequest, LLMResponse
+from ..schemas.llm import LLMRequest, LLMResponse
 from .base import LLMProvider
 
 # Configure logging
@@ -116,7 +116,8 @@ class OpenAIProvider(LLMProvider):
                 usage=usage,
                 latency=time.time() - start_time,
                 raw_response=response,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=response.choices[0].finish_reason,
+                success=True
             )
             
         except Exception as e:
@@ -159,7 +160,8 @@ class OpenAIProvider(LLMProvider):
                 usage=usage,
                 latency=time.time() - start_time,
                 raw_response=response,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=response.choices[0].finish_reason,
+                success=True
             )
             
         except Exception as e:
@@ -182,3 +184,36 @@ class OpenAIProvider(LLMProvider):
         except Exception as e:
             logger.error(f"OpenAI streaming API call failed: {str(e)}")
             raise
+            
+    def batch_complete(self, requests: List[LLMRequest], response_model: Optional[Type[BaseModel]] = None) -> List[LLMResponse]:
+        """Generate completions for a batch of LLM requests."""
+        results = []
+        for request in requests:
+            results.append(self.complete(request, response_model))
+        return results
+    
+    async def abatch_complete(self, requests: List[LLMRequest], response_model: Optional[Type[BaseModel]] = None) -> List[LLMResponse]:
+        """Generate completions for a batch of LLM requests asynchronously."""
+        results = []
+        for request in requests:
+            results.append(await self.acomplete(request, response_model))
+        return results
+    
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported language codes."""
+        # OpenAI doesn't have a concept of language codes since it's not a translation service
+        return ["en"]  # Return English as default
+    
+    def get_supported_models(self) -> List[Dict[str, Any]]:
+        """Get information about supported models."""
+        if not self.client:
+            self.initialize()
+            
+        models = [
+            {"id": "gpt-4o", "name": "GPT-4o", "context_length": 128000},
+            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "context_length": 128000},
+            {"id": "gpt-4", "name": "GPT-4", "context_length": 8192},
+            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "context_length": 16385}
+        ]
+        
+        return models

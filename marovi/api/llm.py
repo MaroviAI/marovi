@@ -11,12 +11,12 @@ import logging
 import asyncio
 from typing import List, Dict, Optional, Type, Any, Union, AsyncIterator, TypeVar, Callable, Tuple
 from functools import lru_cache
+from enum import Enum
 
 from pydantic import BaseModel
 
-from ..core.context import PipelineContext
 from .schemas import LLMRequest, LLMResponse, ProviderType
-from ....marovi.marovi.api.providers import LLMProvider, OpenAIProvider, AnthropicProvider
+from .providers import LLMProvider, OpenAIProvider, AnthropicProvider
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +39,14 @@ DEFAULT_RETRY_CONFIG = {
     ]
 }
 
+class ProviderType(Enum):
+    """Supported LLM providers."""
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
+    GEMINI_REST = "gemini_rest"
+    CUSTOM = "custom"
+
 class LLMClient:
     """
     A unified client for interacting with various LLM providers.
@@ -48,7 +56,6 @@ class LLMClient:
     - Structured JSON responses using Pydantic models
     - Streaming support
     - Async and sync interfaces
-    - Automatic logging to pipeline context
     - Comprehensive observability
     - Retry logic for transient failures
     - Optional response caching
@@ -66,7 +73,7 @@ class LLMClient:
         Initialize the LLM client.
         
         Args:
-            provider: LLM provider ("openai", "anthropic", "llama", or ProviderType enum)
+            provider: LLM provider ("openai", "anthropic", "gemini", or ProviderType enum)
             model: Default model to use (provider-specific)
             api_key: Optional API key (if not provided, will use environment variables)
             custom_provider: Optional custom provider implementation
@@ -90,8 +97,12 @@ class LLMClient:
             self.provider = OpenAIProvider(api_key=api_key)
         elif self.provider_type == ProviderType.ANTHROPIC:
             self.provider = AnthropicProvider(api_key=api_key)
-        elif self.provider_type == ProviderType.LLAMA:
-            raise NotImplementedError("Llama provider not yet implemented")
+        elif self.provider_type == ProviderType.GEMINI:
+            from .providers import GeminiProvider
+            self.provider = GeminiProvider(api_key=api_key)
+        elif self.provider_type == ProviderType.GEMINI_REST:
+            from .providers import GeminiRestProvider
+            self.provider = GeminiRestProvider(api_key=api_key)
         else:
             raise ValueError(f"Unsupported provider type: {self.provider_type}")
         
@@ -173,7 +184,6 @@ class LLMClient:
                 frequency_penalty: Optional[float] = None,
                 presence_penalty: Optional[float] = None,
                 seed: Optional[int] = None,
-                context: Optional[PipelineContext] = None,
                 step_name: Optional[str] = None) -> Union[str, BaseModel]:
         """
         Generate a completion from the LLM.
@@ -190,8 +200,7 @@ class LLMClient:
             frequency_penalty: Optional frequency penalty
             presence_penalty: Optional presence penalty
             seed: Optional random seed for reproducibility
-            context: Optional pipeline context for logging
-            step_name: Name of the step (for context logging)
+            step_name: Name of the step (for logging)
             
         Returns:
             Response from the LLM (parsed as Pydantic model if specified)
@@ -251,7 +260,7 @@ class LLMClient:
                     self._cached_complete(*cache_key, _return=response.content)
                 
                 # Log to context if provided
-                if context and step_name:
+                if step_name:
                     # Add completion info to context
                     completion_info = {
                         "request": request_metadata,
@@ -267,25 +276,9 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    context.log_metrics({
-                        f"{step_name}_llm_latency": response.latency,
-                        f"{step_name}_llm_prompt_length": len(prompt),
-                        f"{step_name}_llm_prompt_tokens": response.usage.get("prompt_tokens", 0) or response.usage.get("input_tokens", 0),
-                        f"{step_name}_llm_completion_tokens": response.usage.get("completion_tokens", 0) or response.usage.get("output_tokens", 0),
-                        f"{step_name}_llm_total_tokens": response.usage.get("total_tokens", 0),
-                        f"{step_name}_llm_attempts": attempt + 1
-                    })
-                    
-                    # Update context state
-                    context.update_state(
-                        f"{step_name}_llm_call",
-                        response.content,
-                        completion_info
-                    )
-                
-                logger.info(f"LLM completion successful: {self.provider_type.value}/{model}, "
-                           f"tokens: {response.usage.get('total_tokens', 0)}, "
-                           f"latency: {response.latency:.2f}s")
+                    logger.info(f"LLM completion successful: {self.provider_type.value}/{model}, "
+                               f"tokens: {response.usage.get('total_tokens', 0)}, "
+                               f"latency: {response.latency:.2f}s")
                 
                 return response.content
                 
@@ -306,19 +299,6 @@ class LLMClient:
                     "attempts": attempt
                 }
                 
-                # Log error to context if provided
-                if context and step_name:
-                    context.update_state(
-                        f"{step_name}_llm_error",
-                        None,
-                        error_info
-                    )
-                    
-                    context.log_metrics({
-                        f"{step_name}_llm_error_count": 1,
-                        f"{step_name}_llm_attempts": attempt
-                    })
-                
                 logger.error(f"LLM call failed after {attempt} attempts: {str(e)}")
                 raise
     
@@ -331,7 +311,6 @@ class LLMClient:
                        system_prompt: Optional[str] = None,
                        stop_sequences: Optional[List[str]] = None,
                        top_p: Optional[float] = None,
-                       context: Optional[PipelineContext] = None,
                        step_name: Optional[str] = None) -> Union[str, BaseModel]:
         """
         Generate a completion from the LLM asynchronously.
@@ -345,8 +324,7 @@ class LLMClient:
             system_prompt: Optional system prompt
             stop_sequences: Optional list of stop sequences
             top_p: Optional top-p sampling parameter
-            context: Optional pipeline context for logging
-            step_name: Name of the step (for context logging)
+            step_name: Name of the step (for logging)
             
         Returns:
             Response from the LLM (parsed as Pydantic model if specified)
@@ -403,7 +381,7 @@ class LLMClient:
                     self._cached_complete(*cache_key, _return=response.content)
                 
                 # Log to context if provided
-                if context and step_name:
+                if step_name:
                     # Add completion info to context
                     completion_info = {
                         "request": request_metadata,
@@ -419,25 +397,9 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    context.log_metrics({
-                        f"{step_name}_llm_latency": response.latency,
-                        f"{step_name}_llm_prompt_length": len(prompt),
-                        f"{step_name}_llm_prompt_tokens": response.usage.get("prompt_tokens", 0) or response.usage.get("input_tokens", 0),
-                        f"{step_name}_llm_completion_tokens": response.usage.get("completion_tokens", 0) or response.usage.get("output_tokens", 0),
-                        f"{step_name}_llm_total_tokens": response.usage.get("total_tokens", 0),
-                        f"{step_name}_llm_attempts": attempt + 1
-                    })
-                    
-                    # Update context state
-                    context.update_state(
-                        f"{step_name}_llm_call",
-                        response.content,
-                        completion_info
-                    )
-                
-                logger.info(f"Async LLM completion successful: {self.provider_type.value}/{model}, "
-                           f"tokens: {response.usage.get('total_tokens', 0)}, "
-                           f"latency: {response.latency:.2f}s")
+                    logger.info(f"Async LLM completion successful: {self.provider_type.value}/{model}, "
+                               f"tokens: {response.usage.get('total_tokens', 0)}, "
+                               f"latency: {response.latency:.2f}s")
                 
                 return response.content
                 
@@ -458,19 +420,6 @@ class LLMClient:
                     "attempts": attempt
                 }
                 
-                # Log error to context if provided
-                if context and step_name:
-                    context.update_state(
-                        f"{step_name}_llm_error",
-                        None,
-                        error_info
-                    )
-                    
-                    context.log_metrics({
-                        f"{step_name}_llm_error_count": 1,
-                        f"{step_name}_llm_attempts": attempt
-                    })
-                
                 logger.error(f"Async LLM call failed after {attempt} attempts: {str(e)}")
                 raise
     
@@ -481,7 +430,6 @@ class LLMClient:
                     max_tokens: int = 8000,
                     system_prompt: Optional[str] = None,
                     stop_sequences: Optional[List[str]] = None,
-                    context: Optional[PipelineContext] = None,
                     step_name: Optional[str] = None) -> AsyncIterator[str]:
         """
         Stream a completion from the LLM.
@@ -493,8 +441,7 @@ class LLMClient:
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt
             stop_sequences: Optional list of stop sequences
-            context: Optional pipeline context for logging
-            step_name: Name of the step (for context logging)
+            step_name: Name of the step (for logging)
             
         Yields:
             Chunks of the response as they become available
@@ -528,17 +475,8 @@ class LLMClient:
             request_metadata["system_prompt_length"] = len(system_prompt)
         
         # Log the start of streaming if context provided
-        if context and step_name:
-            context.update_state(
-                f"{step_name}_llm_stream_start",
-                None,
-                {
-                    "request": request_metadata,
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "start_time": start_time
-                }
-            )
+        if step_name:
+            logger.info(f"LLM streaming started: {self.provider_type.value}/{model}")
         
         full_response = []
         attempt = 0
@@ -551,7 +489,7 @@ class LLMClient:
                     yield chunk
                 
                 # Log completion of streaming if context provided
-                if context and step_name:
+                if step_name:
                     end_time = time.time()
                     latency = end_time - start_time
                     full_text = "".join(full_response)
@@ -568,23 +506,10 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    context.log_metrics({
-                        f"{step_name}_llm_stream_latency": latency,
-                        f"{step_name}_llm_stream_length": len(full_text),
-                        f"{step_name}_llm_attempts": attempt + 1
-                    })
-                    
-                    # Update context state
-                    context.update_state(
-                        f"{step_name}_llm_stream_complete",
-                        full_text,
-                        completion_info
-                    )
+                    logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
+                               f"latency: {latency:.2f}s")
                 
-                logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
-                           f"latency: {time.time() - start_time:.2f}s")
-                
-                break  # Successful completion
+                return
                 
             except Exception as e:
                 attempt += 1
@@ -606,19 +531,6 @@ class LLMClient:
                     "attempts": attempt
                 }
                 
-                # Log error to context if provided
-                if context and step_name:
-                    context.update_state(
-                        f"{step_name}_llm_stream_error",
-                        None,
-                        error_info
-                    )
-                    
-                    context.log_metrics({
-                        f"{step_name}_llm_stream_error_count": 1,
-                        f"{step_name}_llm_attempts": attempt
-                    })
-                
                 logger.error(f"LLM streaming failed after {attempt} attempts: {str(e)}")
                 raise
     
@@ -631,7 +543,6 @@ class LLMClient:
                       system_prompt: Optional[str] = None,
                       stop_sequences: Optional[List[str]] = None,
                       top_p: Optional[float] = None,
-                      context: Optional[PipelineContext] = None,
                       step_name: Optional[str] = None,
                       max_concurrency: int = 5) -> List[Any]:
         """
@@ -646,8 +557,7 @@ class LLMClient:
             system_prompt: Optional system prompt
             stop_sequences: Optional list of stop sequences
             top_p: Optional top-p sampling parameter
-            context: Optional pipeline context for logging
-            step_name: Name of the step (for context logging)
+            step_name: Name of the step (for logging)
             max_concurrency: Maximum number of concurrent requests
             
         Returns:
@@ -673,7 +583,6 @@ class LLMClient:
                             system_prompt=system_prompt,
                             stop_sequences=stop_sequences,
                             top_p=top_p,
-                            context=context,
                             step_name=f"{step_name}_{i}" if step_name else None
                         )
                         results.append(result)
@@ -698,33 +607,12 @@ class LLMClient:
                 results.append(None)
         
         # Log batch metrics if context provided
-        if context and step_name:
+        if step_name:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            context.log_metrics({
-                f"{step_name}_batch_total_time": batch_time,
-                f"{step_name}_batch_avg_time": batch_time / len(prompts),
-                f"{step_name}_batch_size": len(prompts),
-                f"{step_name}_batch_success_rate": success_rate,
-                f"{step_name}_batch_failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            })
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(prompts),
-                "batch_size": len(prompts),
-                "success_rate": success_rate,
-                "success_count": sum(1 for r in results if r is not None),
-                "failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            }
-            
-            context.update_state(
-                f"{step_name}_batch_summary",
-                None,
-                batch_info
-            )
+            logger.info(f"Batch completed: {self.provider_type.value}/{model}, "
+                       f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
     
@@ -737,7 +625,6 @@ class LLMClient:
                              system_prompt: Optional[str] = None,
                              stop_sequences: Optional[List[str]] = None,
                              top_p: Optional[float] = None,
-                             context: Optional[PipelineContext] = None,
                              step_name: Optional[str] = None,
                              max_concurrency: int = 5) -> List[Any]:
         """
@@ -752,8 +639,7 @@ class LLMClient:
             system_prompt: Optional system prompt
             stop_sequences: Optional list of stop sequences
             top_p: Optional top-p sampling parameter
-            context: Optional pipeline context for logging
-            step_name: Name of the step (for context logging)
+            step_name: Name of the step (for logging)
             max_concurrency: Maximum number of concurrent requests
             
         Returns:
@@ -779,7 +665,6 @@ class LLMClient:
                             system_prompt=system_prompt,
                             stop_sequences=stop_sequences,
                             top_p=top_p,
-                            context=context,
                             step_name=f"{step_name}_{i}" if step_name else None
                         )
                         return result  # Success
@@ -804,34 +689,12 @@ class LLMClient:
         results = await asyncio.gather(*tasks, return_exceptions=False)
         
         # Log batch metrics if context provided
-        if context and step_name:
+        if step_name:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            context.log_metrics({
-                f"{step_name}_batch_total_time": batch_time,
-                f"{step_name}_batch_avg_time": batch_time / len(prompts),
-                f"{step_name}_batch_size": len(prompts),
-                f"{step_name}_batch_success_rate": success_rate,
-                f"{step_name}_batch_failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            })
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(prompts),
-                "batch_size": len(prompts),
-                "success_rate": success_rate,
-                "success_count": sum(1 for r in results if r is not None),
-                "failure_count": len(prompts) - sum(1 for r in results if r is not None),
-                "concurrent_limit": max_concurrency
-            }
-            
-            context.update_state(
-                f"{step_name}_batch_summary",
-                None,
-                batch_info
-            )
+            logger.info(f"Batch completed: {self.provider_type.value}/{model}, "
+                       f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
 
@@ -843,60 +706,22 @@ class LLMClientWithResponse(LLMClient):
     
     def _log_completion_to_context(self, context, step_name, request_metadata, prompt, 
                                   system_prompt, response, attempt):
-        """Helper method to log completion information to context."""
-        # Add completion info to context
-        completion_info = {
-            "request": request_metadata,
-            "prompt": prompt,
-            "system_prompt": system_prompt,
-            "response": response.content,
-            "usage": response.usage,
-            "latency": response.latency,
-            "model": response.model,
-            "finish_reason": response.finish_reason,
-            "success": True,
-            "attempts": attempt + 1
-        }
-        
-        # Log metrics
-        context.log_metrics({
-            f"{step_name}_llm_latency": response.latency,
-            f"{step_name}_llm_prompt_length": len(prompt),
-            f"{step_name}_llm_prompt_tokens": response.usage.get("prompt_tokens", 0) or response.usage.get("input_tokens", 0),
-            f"{step_name}_llm_completion_tokens": response.usage.get("completion_tokens", 0) or response.usage.get("output_tokens", 0),
-            f"{step_name}_llm_total_tokens": response.usage.get("total_tokens", 0),
-            f"{step_name}_llm_attempts": attempt + 1
-        })
-        
-        # Update context state
-        context.update_state(
-            f"{step_name}_llm_call",
-            response.content,
-            completion_info
-        )
-    
-    def _log_error_to_context(self, context, step_name, request_metadata, error, attempt):
-        """Helper method to log error information to context."""
-        if not context or not step_name:
+        """Log completion details to context if provided."""
+        if not step_name:
             return
             
-        error_info = {
-            "error": str(error),
-            "error_type": type(error).__name__,
-            "request": request_metadata,
-            "attempts": attempt
-        }
-        
-        context.update_state(
-            f"{step_name}_llm_error",
-            None,
-            error_info
-        )
-        
-        context.log_metrics({
-            f"{step_name}_llm_error_count": 1,
-            f"{step_name}_llm_attempts": attempt
-        })
+        # We'll keep this method for backward compatibility, but just log to console
+        logger.info(f"LLM completion successful: {self.provider_type.value}/{response.model}, "
+                   f"tokens: {response.usage.get('total_tokens', 0)}, "
+                   f"latency: {response.latency:.2f}s")
+                   
+    def _log_error_to_context(self, context, step_name, request_metadata, error, attempt):
+        """Log error details to context if provided."""
+        if not step_name:
+            return
+            
+        # We'll keep this method for backward compatibility, but just log to console
+        logger.error(f"LLM call failed after {attempt} attempts: {str(error)}")
     
     def complete(self, *args, **kwargs) -> LLMResponse:
         """
@@ -924,7 +749,6 @@ class LLMClientWithResponse(LLMClient):
         frequency_penalty = kwargs.get('frequency_penalty')
         presence_penalty = kwargs.get('presence_penalty')
         seed = kwargs.get('seed')
-        context = kwargs.get('context')
         step_name = kwargs.get('step_name')
         
         start_time = time.time()
@@ -981,13 +805,9 @@ class LLMClientWithResponse(LLMClient):
                     self._cached_complete(*cache_key, _return=response)
                 
                 # Log to context if provided
-                if context and step_name:
-                    self._log_completion_to_context(context, step_name, request_metadata, prompt, 
+                if step_name:
+                    self._log_completion_to_context(None, step_name, request_metadata, prompt, 
                                                  system_prompt, response, attempt)
-                
-                logger.info(f"LLM completion successful: {self.provider_type.value}/{model}, "
-                           f"tokens: {response.usage.get('total_tokens', 0)}, "
-                           f"latency: {response.latency:.2f}s")
                 
                 return response
                 
@@ -1001,7 +821,7 @@ class LLMClientWithResponse(LLMClient):
                     continue
                 
                 # If we shouldn't retry, log the error and raise
-                self._log_error_to_context(context, step_name, request_metadata, e, attempt)
+                self._log_error_to_context(None, step_name, request_metadata, e, attempt)
                 logger.error(f"LLM call failed after {attempt} attempts: {str(e)}")
                 raise
     
@@ -1031,7 +851,6 @@ class LLMClientWithResponse(LLMClient):
         frequency_penalty = kwargs.get('frequency_penalty')
         presence_penalty = kwargs.get('presence_penalty')
         seed = kwargs.get('seed')
-        context = kwargs.get('context')
         step_name = kwargs.get('step_name')
         
         start_time = time.time()
@@ -1088,13 +907,9 @@ class LLMClientWithResponse(LLMClient):
                     self._cached_complete(*cache_key, _return=response)
                 
                 # Log to context if provided
-                if context and step_name:
-                    self._log_completion_to_context(context, step_name, request_metadata, prompt, 
+                if step_name:
+                    self._log_completion_to_context(None, step_name, request_metadata, prompt, 
                                                   system_prompt, response, attempt)
-                
-                logger.info(f"Async LLM completion successful: {self.provider_type.value}/{model}, "
-                           f"tokens: {response.usage.get('total_tokens', 0)}, "
-                           f"latency: {response.latency:.2f}s")
                 
                 return response
                 
@@ -1108,7 +923,7 @@ class LLMClientWithResponse(LLMClient):
                     continue
                 
                 # If we shouldn't retry, log the error and raise
-                self._log_error_to_context(context, step_name, request_metadata, e, attempt)
+                self._log_error_to_context(None, step_name, request_metadata, e, attempt)
                 logger.error(f"Async LLM call failed after {attempt} attempts: {str(e)}")
                 raise
     
@@ -1146,7 +961,6 @@ class LLMClientWithResponse(LLMClient):
         max_tokens = kwargs.get('max_tokens', 8000)
         system_prompt = kwargs.get('system_prompt')
         stop_sequences = kwargs.get('stop_sequences')
-        context = kwargs.get('context')
         step_name = kwargs.get('step_name')
         
         start_time = time.time()
@@ -1177,17 +991,8 @@ class LLMClientWithResponse(LLMClient):
             request_metadata["system_prompt_length"] = len(system_prompt)
         
         # Log the start of streaming if context provided
-        if context and step_name:
-            context.update_state(
-                f"{step_name}_llm_stream_start",
-                None,
-                {
-                    "request": request_metadata,
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "start_time": start_time
-                }
-            )
+        if step_name:
+            logger.info(f"LLM streaming started: {self.provider_type.value}/{model}")
         
         # Storage for collected chunks
         result = self.StreamResult()
@@ -1201,7 +1006,7 @@ class LLMClientWithResponse(LLMClient):
                     yield chunk
                 
                 # Log completion of streaming if context provided
-                if context and step_name:
+                if step_name:
                     end_time = time.time()
                     latency = end_time - start_time
                     full_text = "".join(result.chunks)
@@ -1218,23 +1023,10 @@ class LLMClientWithResponse(LLMClient):
                     }
                     
                     # Log metrics
-                    context.log_metrics({
-                        f"{step_name}_llm_stream_latency": latency,
-                        f"{step_name}_llm_stream_length": len(full_text),
-                        f"{step_name}_llm_attempts": attempt + 1
-                    })
-                    
-                    # Update context state
-                    context.update_state(
-                        f"{step_name}_llm_stream_complete",
-                        full_text,
-                        completion_info
-                    )
+                    logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
+                               f"latency: {latency:.2f}s")
                 
-                logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
-                           f"latency: {time.time() - start_time:.2f}s")
-                
-                break  # Successful completion
+                return
                 
             except Exception as e:
                 attempt += 1
@@ -1257,17 +1049,8 @@ class LLMClientWithResponse(LLMClient):
                 }
                 
                 # Log error to context if provided
-                if context and step_name:
-                    context.update_state(
-                        f"{step_name}_llm_stream_error",
-                        None,
-                        error_info
-                    )
-                    
-                    context.log_metrics({
-                        f"{step_name}_llm_stream_error_count": 1,
-                        f"{step_name}_llm_attempts": attempt
-                    })
+                if step_name:
+                    self._log_error_to_context(None, step_name, request_metadata, e, attempt)
                 
                 logger.error(f"LLM streaming failed after {attempt} attempts: {str(e)}")
                 raise
@@ -1336,35 +1119,13 @@ class LLMClientWithResponse(LLMClient):
                 results.append(None)
         
         # Log batch metrics if context provided
-        context = kwargs.get('context')
         step_name = kwargs.get('step_name')
-        if context and step_name:
+        if step_name:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            context.log_metrics({
-                f"{step_name}_batch_total_time": batch_time,
-                f"{step_name}_batch_avg_time": batch_time / len(prompts),
-                f"{step_name}_batch_size": len(prompts),
-                f"{step_name}_batch_success_rate": success_rate,
-                f"{step_name}_batch_failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            })
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(prompts),
-                "batch_size": len(prompts),
-                "success_rate": success_rate,
-                "success_count": sum(1 for r in results if r is not None),
-                "failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            }
-            
-            context.update_state(
-                f"{step_name}_batch_summary",
-                None,
-                batch_info
-            )
+            logger.info(f"Batch completed: {self.provider_type.value}/{results[0].model if results else 'unknown'}, "
+                       f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
     
@@ -1421,36 +1182,13 @@ class LLMClientWithResponse(LLMClient):
         results = await asyncio.gather(*tasks, return_exceptions=False)
         
         # Log batch metrics if context provided
-        context = kwargs.get('context')
         step_name = kwargs.get('step_name')
-        if context and step_name:
+        if step_name:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            context.log_metrics({
-                f"{step_name}_batch_total_time": batch_time,
-                f"{step_name}_batch_avg_time": batch_time / len(prompts),
-                f"{step_name}_batch_size": len(prompts),
-                f"{step_name}_batch_success_rate": success_rate,
-                f"{step_name}_batch_failure_count": len(prompts) - sum(1 for r in results if r is not None)
-            })
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(prompts),
-                "batch_size": len(prompts),
-                "success_rate": success_rate,
-                "success_count": sum(1 for r in results if r is not None),
-                "failure_count": len(prompts) - sum(1 for r in results if r is not None),
-                "concurrent_limit": max_concurrency
-            }
-            
-            context.update_state(
-                f"{step_name}_batch_summary",
-                None,
-                batch_info
-            )
+            logger.info(f"Batch completed: {self.provider_type.value}/{results[0].model if results else 'unknown'}, "
+                       f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
 
@@ -1467,7 +1205,7 @@ def create_llm_client(provider: Union[str, ProviderType] = ProviderType.OPENAI,
     Factory function to create an LLM client with optimized configuration.
     
     Args:
-        provider: LLM provider ("openai", "anthropic", "llama", or ProviderType enum)
+        provider: LLM provider ("openai", "anthropic", "gemini", or ProviderType enum)
         model: Default model to use (provider-specific)
         api_key: Optional API key (if not provided, will use environment variables)
         return_full_response: Whether to return full LLMResponse objects

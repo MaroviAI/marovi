@@ -8,13 +8,13 @@ import os
 import time
 import logging
 import json
-from typing import Dict, Optional, Type, Any, AsyncIterator
+from typing import Dict, Optional, Type, Any, AsyncIterator, List
 
 import anthropic
 from anthropic import Anthropic, AsyncAnthropic
 from pydantic import BaseModel
 
-from .....MaroviPipelines.marovipipelines.llm.schemas import LLMRequest, LLMResponse
+from ..schemas.llm import LLMRequest, LLMResponse
 from .base import LLMProvider
 
 # Configure logging
@@ -108,7 +108,8 @@ class AnthropicProvider(LLMProvider):
                 usage=usage,
                 latency=time.time() - start_time,
                 raw_response=response,
-                finish_reason=response.stop_reason
+                finish_reason=response.stop_reason,
+                success=True
             )
             
         except Exception as e:
@@ -151,7 +152,8 @@ class AnthropicProvider(LLMProvider):
                 usage=usage,
                 latency=time.time() - start_time,
                 raw_response=response,
-                finish_reason=response.stop_reason
+                finish_reason=response.stop_reason,
+                success=True
             )
             
         except Exception as e:
@@ -174,3 +176,37 @@ class AnthropicProvider(LLMProvider):
         except Exception as e:
             logger.error(f"Anthropic streaming API call failed: {str(e)}")
             raise
+            
+    def batch_complete(self, requests: List[LLMRequest], response_model: Optional[Type[BaseModel]] = None) -> List[LLMResponse]:
+        """Generate completions for a batch of LLM requests."""
+        results = []
+        for request in requests:
+            results.append(self.complete(request, response_model))
+        return results
+    
+    async def abatch_complete(self, requests: List[LLMRequest], response_model: Optional[Type[BaseModel]] = None) -> List[LLMResponse]:
+        """Generate completions for a batch of LLM requests asynchronously."""
+        results = []
+        for request in requests:
+            results.append(await self.acomplete(request, response_model))
+        return results
+    
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported language codes."""
+        # Anthropic doesn't have a concept of language codes since it's not a translation service
+        return ["en"]  # Return English as default
+    
+    def get_supported_models(self) -> List[Dict[str, Any]]:
+        """Get information about supported models."""
+        if not self.client:
+            self.initialize()
+            
+        models = [
+            {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "context_length": 200000},
+            {"id": "claude-3-sonnet-20240229", "name": "Claude 3 Sonnet", "context_length": 200000},
+            {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku", "context_length": 200000},
+            {"id": "claude-2.1", "name": "Claude 2.1", "context_length": 100000},
+            {"id": "claude-2.0", "name": "Claude 2.0", "context_length": 100000}
+        ]
+        
+        return models

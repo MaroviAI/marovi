@@ -109,4 +109,78 @@ providers:
         description: "Translation provider that uses ChatGPT for translation"
         requires:
           - type: "llm"
-            provider: "openai" 
+            provider: "openai"
+
+  # Google REST
+  google_rest:
+    name: "Google REST"
+    description: "Google's Translation API using REST interface (API Key only)"
+    services:
+      llm:
+        supported: false
+        features: []
+        models: []
+      translation:
+        supported: true
+        features:
+          - "text_translation"
+          - "batch_translation"
+        models:
+          - id: "nmt"
+            name: "Neural Machine Translation"
+            description: "Google's neural machine translation system"
+            supports_batch: true
+
+  # Gemini
+  gemini:
+    name: "Google Gemini"
+    description: "Google's Gemini LLM models"
+    services:
+      llm:
+        supported: true
+        features:
+          - "text_generation"
+          - "chat_completion"
+          - "streaming"
+        models:
+          - id: "gemini-1.5-pro"
+            name: "Gemini 1.5 Pro"
+            description: "Google's advanced multimodal model"
+            context_length: 1000000
+            supports_vision: true
+          - id: "gemini-1.5-flash"
+            name: "Gemini 1.5 Flash"
+            description: "Faster and more cost-effective Gemini model"
+            context_length: 1000000
+            supports_vision: true
+      translation:
+        supported: false
+        features: []
+        models: []
+
+  # Gemini REST
+  gemini_rest:
+    name: "Google Gemini REST"
+    description: "Google's Gemini LLM models using REST API (API Key only)"
+    services:
+      llm:
+        supported: true
+        features:
+          - "text_generation"
+          - "chat_completion"
+          - "streaming"
+        models:
+          - id: "gemini-1.5-pro"
+            name: "Gemini 1.5 Pro"
+            description: "Google's advanced multimodal model"
+            context_length: 1000000
+            supports_vision: true
+          - id: "gemini-1.5-flash"
+            name: "Gemini 1.5 Flash"
+            description: "Faster and more cost-effective Gemini model"
+            context_length: 1000000
+            supports_vision: true
+      translation:
+        supported: false
+        features: []
+        models: [] 
