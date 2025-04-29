@@ -15,6 +15,7 @@ from openai import OpenAI, AsyncOpenAI
 from pydantic import BaseModel
 
 from ..schemas.llm import LLMRequest, LLMResponse
+from ..schemas.translation import TranslationFormat
 from .base import LLMProvider
 
 # Configure logging
@@ -40,6 +41,43 @@ class OpenAIProvider(LLMProvider):
     def get_default_model(self) -> str:
         """Get the default model for OpenAI."""
         return "gpt-4o-2024-08-06"
+    
+    def get_supported_models(self) -> List[str]:
+        """Get list of supported models."""
+        return [
+            "gpt-4o-2024-08-06",
+            "gpt-4o-mini-2024-07-18",
+            "gpt-4-turbo-2024-04-09",
+            "gpt-3.5-turbo-0125"
+        ]
+    
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported language codes."""
+        # OpenAI doesn't have a concept of language codes since it's not a translation service
+        return ["en"]  # Return English as default
+    
+    def get_supported_formats(self) -> List[TranslationFormat]:
+        """Get list of supported translation formats."""
+        return [
+            TranslationFormat.TEXT,
+            TranslationFormat.HTML,
+            TranslationFormat.MARKDOWN,
+            TranslationFormat.JSON,
+            TranslationFormat.XML
+        ]
+    
+    def get_quality_metrics(self) -> List[str]:
+        """Get list of supported quality metrics."""
+        return ["confidence", "fluency", "adequacy", "terminology"]
+    
+    def get_rate_limits(self) -> Dict[str, Any]:
+        """Get rate limits and quotas for this provider."""
+        return {
+            "requests_per_minute": 60,
+            "tokens_per_minute": 90000,
+            "max_tokens_per_request": 128000,
+            "max_requests_per_day": 100000
+        }
     
     def _prepare_messages(self, request: LLMRequest) -> List[Dict[str, str]]:
         """Prepare messages for OpenAI API."""
@@ -198,22 +236,3 @@ class OpenAIProvider(LLMProvider):
         for request in requests:
             results.append(await self.acomplete(request, response_model))
         return results
-    
-    def get_supported_languages(self) -> List[str]:
-        """Get list of supported language codes."""
-        # OpenAI doesn't have a concept of language codes since it's not a translation service
-        return ["en"]  # Return English as default
-    
-    def get_supported_models(self) -> List[Dict[str, Any]]:
-        """Get information about supported models."""
-        if not self.client:
-            self.initialize()
-            
-        models = [
-            {"id": "gpt-4o", "name": "GPT-4o", "context_length": 128000},
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "context_length": 128000},
-            {"id": "gpt-4", "name": "GPT-4", "context_length": 8192},
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "context_length": 16385}
-        ]
-        
-        return models

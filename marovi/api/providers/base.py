@@ -10,7 +10,10 @@ from pydantic import BaseModel
 
 from ..schemas.base import BaseRequest, BaseResponse, BatchRequest, BatchResponse
 from ..schemas.llm import LLMRequest, LLMResponse, LLMBatchRequest, LLMBatchResponse
-from ..schemas.translation import TranslationRequest, TranslationResponse, TranslationBatchRequest, TranslationBatchResponse
+from ..schemas.translation import (
+    TranslationRequest, TranslationResponse, TranslationBatchRequest, TranslationBatchResponse,
+    TranslationFormat, GlossaryEntry
+)
 
 class Provider(ABC):
     """Abstract base class for all providers."""
@@ -33,6 +36,21 @@ class Provider(ABC):
     @abstractmethod
     def get_supported_languages(self) -> List[str]:
         """Get list of supported languages."""
+        pass
+    
+    @abstractmethod
+    def get_supported_formats(self) -> List[TranslationFormat]:
+        """Get list of supported translation formats."""
+        pass
+    
+    @abstractmethod
+    def get_quality_metrics(self) -> List[str]:
+        """Get list of supported quality metrics."""
+        pass
+    
+    @abstractmethod
+    def get_rate_limits(self) -> Dict[str, Any]:
+        """Get rate limits and quotas for this provider."""
         pass
 
 class LLMProvider(Provider):
@@ -84,5 +102,35 @@ class TranslationProvider(Provider):
     @abstractmethod
     async def abatch_translate(self, request: TranslationBatchRequest) -> TranslationBatchResponse:
         """Translate texts in batch asynchronously."""
+        pass
+    
+    @abstractmethod
+    def apply_glossary(self, text: str, glossary: List[GlossaryEntry]) -> str:
+        """Apply glossary terms to translated text."""
+        pass
+    
+    @abstractmethod
+    def refine_translation(self, text: str, base_translation: str) -> str:
+        """Refine a base translation."""
+        pass
+    
+    @abstractmethod
+    def get_quality_metrics(self, source: str, target: str) -> Dict[str, float]:
+        """Get quality metrics for a translation."""
+        pass
+    
+    @abstractmethod
+    def detect_language(self, text: str) -> str:
+        """Detect the language of the input text."""
+        pass
+    
+    @abstractmethod
+    def get_supported_domains(self) -> List[str]:
+        """Get list of supported translation domains."""
+        pass
+    
+    @abstractmethod
+    def get_supported_quality_preferences(self) -> List[str]:
+        """Get list of supported quality preferences."""
         pass
     
