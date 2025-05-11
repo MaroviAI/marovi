@@ -15,8 +15,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from .schemas import LLMRequest, LLMResponse, ProviderType
-from .providers import LLMProvider, OpenAIProvider, AnthropicProvider
+from marovi.api.schemas import LLMRequest, LLMResponse
+from marovi.api.core.base import ServiceType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +47,77 @@ class ProviderType(Enum):
     GEMINI_REST = "gemini_rest"
     CUSTOM = "custom"
 
+# Global default provider and client cache
+_default_provider = "openai"
+_client_cache: Dict[str, 'LLMClient'] = {}
+
+def set_default_provider(provider: str):
+    """
+    Set the default LLM provider for the application.
+    
+    Args:
+        provider: Provider identifier string
+    
+    Raises:
+        ValueError: If provider is not valid
+    """
+    global _default_provider
+    
+    # Validate the provider
+    valid_providers = [p.value for p in ProviderType]
+    if provider not in valid_providers:
+        raise ValueError(f"Unknown provider: {provider}. Valid options are: {valid_providers}")
+    
+    _default_provider = provider
+    logger.info(f"Default LLM provider set to {_default_provider}")
+
+def get_client(provider: Optional[str] = None, 
+              model: Optional[str] = None,
+              api_key: Optional[str] = None,
+              return_full_response: bool = False) -> Union['LLMClient', 'LLMClientWithResponse']:
+    """
+    Get an LLM client for the specified provider.
+    
+    Args:
+        provider: Provider identifier string (uses default if None)
+        model: Optional default model to use
+        api_key: Optional API key to use
+        return_full_response: Whether to return a client that returns full response objects
+        
+    Returns:
+        LLMClient or LLMClientWithResponse instance
+        
+    Raises:
+        ValueError: If provider is not valid
+    """
+    global _client_cache, _default_provider
+    
+    provider = provider or _default_provider
+    
+    # Validate the provider
+    valid_providers = [p.value for p in ProviderType]
+    if provider not in valid_providers:
+        raise ValueError(f"Unknown provider: {provider}. Valid options are: {valid_providers}")
+    
+    # Create cache key that includes full response flag
+    cache_key = f"{provider}:{model or 'default'}:{return_full_response}"
+    
+    if cache_key not in _client_cache:
+        if return_full_response:
+            _client_cache[cache_key] = LLMClientWithResponse(
+                provider=provider,
+                model=model,
+                api_key=api_key
+            )
+        else:
+            _client_cache[cache_key] = LLMClient(
+                provider=provider,
+                model=model,
+                api_key=api_key
+            )
+    
+    return _client_cache[cache_key]
+
 class LLMClient:
     """
     A unified client for interacting with various LLM providers.
@@ -62,10 +133,10 @@ class LLMClient:
     """
 
     def __init__(self, 
-                provider: Union[str, ProviderType] = ProviderType.OPENAI, 
+                provider: Union[str, ProviderType] = "openai", 
                 model: Optional[str] = None,
                 api_key: Optional[str] = None,
-                custom_provider: Optional[LLMProvider] = None,
+                custom_provider: Optional[Any] = None,
                 retry_config: Optional[Dict[str, Any]] = None,
                 enable_cache: bool = False,
                 cache_size: int = 100):
@@ -73,7 +144,7 @@ class LLMClient:
         Initialize the LLM client.
         
         Args:
-            provider: LLM provider ("openai", "anthropic", "gemini", or ProviderType enum)
+            provider: LLM provider ("openai", "anthropic", "gemini", etc.)
             model: Default model to use (provider-specific)
             api_key: Optional API key (if not provided, will use environment variables)
             custom_provider: Optional custom provider implementation
@@ -81,30 +152,43 @@ class LLMClient:
             enable_cache: Whether to enable response caching
             cache_size: Maximum number of responses to cache
         """
-        if isinstance(provider, str):
-            try:
-                self.provider_type = ProviderType(provider.lower())
-            except ValueError:
-                raise ValueError(f"Unsupported provider: {provider}")
+        # Convert provider to string if it's an enum
+        if isinstance(provider, ProviderType):
+            provider_str = provider.value
         else:
-            self.provider_type = provider
+            provider_str = provider
+            
+        # Store the provider string value
+        self.provider_type_str = provider_str
+        
+        # Also store enum for compatibility with existing code
+        try:
+            self.provider_type = ProviderType(provider_str.lower())
+        except ValueError:
+            # If not a standard provider, default to CUSTOM
+            self.provider_type = ProviderType.CUSTOM
         
         # Initialize the appropriate provider
         if custom_provider:
             self.provider = custom_provider
-            self.provider_type = ProviderType.CUSTOM
-        elif self.provider_type == ProviderType.OPENAI:
-            self.provider = OpenAIProvider(api_key=api_key)
-        elif self.provider_type == ProviderType.ANTHROPIC:
-            self.provider = AnthropicProvider(api_key=api_key)
-        elif self.provider_type == ProviderType.GEMINI:
-            from .providers import GeminiProvider
-            self.provider = GeminiProvider(api_key=api_key)
-        elif self.provider_type == ProviderType.GEMINI_REST:
-            from .providers import GeminiRestProvider
-            self.provider = GeminiRestProvider(api_key=api_key)
+        elif provider_str == "openai":
+            # Use lazy import to avoid circular imports
+            from marovi.api.providers import get_openai_provider
+            self.provider = get_openai_provider()()
+        elif provider_str == "anthropic":
+            # Use lazy import to avoid circular imports
+            from marovi.api.providers import get_anthropic_provider
+            self.provider = get_anthropic_provider()()
+        elif provider_str == "gemini":
+            # Use lazy import to avoid circular imports
+            from marovi.api.providers import get_gemini_provider
+            self.provider = get_gemini_provider()()
+        elif provider_str == "gemini_rest":
+            # Use lazy import to avoid circular imports
+            from marovi.api.providers import get_gemini_rest_provider
+            self.provider = get_gemini_rest_provider()()
         else:
-            raise ValueError(f"Unsupported provider type: {self.provider_type}")
+            raise ValueError(f"Unsupported provider: {provider_str}")
         
         # Initialize the provider
         self.provider.initialize()
@@ -120,7 +204,7 @@ class LLMClient:
         if enable_cache:
             self._setup_cache(cache_size)
         
-        logger.info(f"Initialized LLMClient with provider={self.provider_type.value}, model={self.model}")
+        logger.info(f"Initialized LLMClient with provider={provider_str}, model={self.model}")
     
     def _setup_cache(self, cache_size: int) -> None:
         """Set up LRU cache for responses."""
@@ -233,7 +317,7 @@ class LLMClient:
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -276,7 +360,7 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    logger.info(f"LLM completion successful: {self.provider_type.value}/{model}, "
+                    logger.info(f"LLM completion successful: {self.provider_type_str}/{model}, "
                                f"tokens: {response.usage.get('total_tokens', 0)}, "
                                f"latency: {response.latency:.2f}s")
                 
@@ -354,7 +438,7 @@ class LLMClient:
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -397,7 +481,7 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    logger.info(f"Async LLM completion successful: {self.provider_type.value}/{model}, "
+                    logger.info(f"Async LLM completion successful: {self.provider_type_str}/{model}, "
                                f"tokens: {response.usage.get('total_tokens', 0)}, "
                                f"latency: {response.latency:.2f}s")
                 
@@ -462,7 +546,7 @@ class LLMClient:
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -476,7 +560,7 @@ class LLMClient:
         
         # Log the start of streaming if context provided
         if step_name:
-            logger.info(f"LLM streaming started: {self.provider_type.value}/{model}")
+            logger.info(f"LLM streaming started: {self.provider_type_str}/{model}")
         
         full_response = []
         attempt = 0
@@ -506,7 +590,7 @@ class LLMClient:
                     }
                     
                     # Log metrics
-                    logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
+                    logger.info(f"LLM streaming completed: {self.provider_type_str}/{model}, "
                                f"latency: {latency:.2f}s")
                 
                 return
@@ -611,7 +695,7 @@ class LLMClient:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            logger.info(f"Batch completed: {self.provider_type.value}/{model}, "
+            logger.info(f"Batch completed: {self.provider_type_str}/{model}, "
                        f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
@@ -693,7 +777,7 @@ class LLMClient:
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            logger.info(f"Batch completed: {self.provider_type.value}/{model}, "
+            logger.info(f"Batch completed: {self.provider_type_str}/{model}, "
                        f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
@@ -711,7 +795,7 @@ class LLMClientWithResponse(LLMClient):
             return
             
         # We'll keep this method for backward compatibility, but just log to console
-        logger.info(f"LLM completion successful: {self.provider_type.value}/{response.model}, "
+        logger.info(f"LLM completion successful: {self.provider_type_str}/{response.model}, "
                    f"tokens: {response.usage.get('total_tokens', 0)}, "
                    f"latency: {response.latency:.2f}s")
                    
@@ -778,7 +862,7 @@ class LLMClientWithResponse(LLMClient):
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -880,7 +964,7 @@ class LLMClientWithResponse(LLMClient):
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -978,7 +1062,7 @@ class LLMClientWithResponse(LLMClient):
         
         # Prepare request metadata for logging
         request_metadata = {
-            "provider": self.provider_type.value,
+            "provider": self.provider_type_str,
             "model": model,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -992,7 +1076,7 @@ class LLMClientWithResponse(LLMClient):
         
         # Log the start of streaming if context provided
         if step_name:
-            logger.info(f"LLM streaming started: {self.provider_type.value}/{model}")
+            logger.info(f"LLM streaming started: {self.provider_type_str}/{model}")
         
         # Storage for collected chunks
         result = self.StreamResult()
@@ -1023,7 +1107,7 @@ class LLMClientWithResponse(LLMClient):
                     }
                     
                     # Log metrics
-                    logger.info(f"LLM streaming completed: {self.provider_type.value}/{model}, "
+                    logger.info(f"LLM streaming completed: {self.provider_type_str}/{model}, "
                                f"latency: {latency:.2f}s")
                 
                 return
@@ -1124,7 +1208,7 @@ class LLMClientWithResponse(LLMClient):
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            logger.info(f"Batch completed: {self.provider_type.value}/{results[0].model if results else 'unknown'}, "
+            logger.info(f"Batch completed: {self.provider_type_str}/{results[0].model if results else 'unknown'}, "
                        f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
@@ -1187,25 +1271,25 @@ class LLMClientWithResponse(LLMClient):
             batch_time = time.time() - batch_start_time
             success_rate = sum(1 for r in results if r is not None) / len(prompts)
             
-            logger.info(f"Batch completed: {self.provider_type.value}/{results[0].model if results else 'unknown'}, "
+            logger.info(f"Batch completed: {self.provider_type_str}/{results[0].model if results else 'unknown'}, "
                        f"total time: {batch_time:.2f}s, success rate: {success_rate:.2f}")
         
         return results
 
 
-def create_llm_client(provider: Union[str, ProviderType] = ProviderType.OPENAI,
+def create_llm_client(provider: Union[str, ProviderType] = None,
                      model: Optional[str] = None,
                      api_key: Optional[str] = None,
                      return_full_response: bool = False,
-                     custom_provider: Optional[LLMProvider] = None,
+                     custom_provider: Optional[Any] = None,
                      retry_config: Optional[Dict[str, Any]] = None,
                      enable_cache: bool = False,
                      cache_size: int = 100) -> Union[LLMClient, LLMClientWithResponse]:
     """
-    Factory function to create an LLM client with optimized configuration.
+    Factory function to create an LLM client.
     
     Args:
-        provider: LLM provider ("openai", "anthropic", "gemini", or ProviderType enum)
+        provider: LLM provider ("openai", "anthropic", "gemini", etc.)
         model: Default model to use (provider-specific)
         api_key: Optional API key (if not provided, will use environment variables)
         return_full_response: Whether to return full LLMResponse objects
@@ -1217,9 +1301,20 @@ def create_llm_client(provider: Union[str, ProviderType] = ProviderType.OPENAI,
     Returns:
         LLMClient or LLMClientWithResponse instance
     """
+    # For simple cases, use the cached client
+    provider_val = provider or _default_provider
+    
+    # Convert enum to string if needed
+    if isinstance(provider_val, ProviderType):
+        provider_val = provider_val.value
+        
+    if not custom_provider and not retry_config and not enable_cache:
+        return get_client(provider_val, model, api_key, return_full_response)
+        
+    # For more complex cases, create a new client
     if return_full_response:
         return LLMClientWithResponse(
-            provider=provider,
+            provider=provider_val,
             model=model,
             api_key=api_key,
             custom_provider=custom_provider,
@@ -1229,7 +1324,7 @@ def create_llm_client(provider: Union[str, ProviderType] = ProviderType.OPENAI,
         )
     else:
         return LLMClient(
-            provider=provider,
+            provider=provider_val,
             model=model,
             api_key=api_key,
             custom_provider=custom_provider,

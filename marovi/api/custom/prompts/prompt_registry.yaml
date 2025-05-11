@@ -1,0 +1,35 @@
+# Prompt Registry
+# This file tracks all Jinja templates and their associated system prompts
+
+templates:
+  # Translation Templates
+  llm_translate:
+    file: "llm_translate.jinja"
+    description: "Basic translation template with formatting and domain support"
+    input_fields:
+      schema: "translation.TranslationRequest"
+    output_format: "json"
+    output_fields:
+      schema: "translation.TranslationResponse"
+      
+  # Format Conversion Templates
+  convert_format:
+    file: "convert_format.jinja"
+    description: "Template for converting text between different formats (HTML, Markdown, Wiki, LaTeX, etc.)"
+    input_fields:
+      schema: "format_conversion.FormatConversionRequest"
+    output_format: "text"
+    output_fields:
+      schema: "format_conversion.FormatConversionResponse"
+
+  # Summarization Templates
+  summarize:
+    file: "summarize.jinja"
+    description: "Template for generating summaries of text with various styles and parameters"
+    input_fields:
+      schema: "summarization.SummarizationRequest"
+    output_format: "text"
+    output_fields:
+      schema: "summarization.SummarizationResponse"
+
+

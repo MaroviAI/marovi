@@ -60,6 +60,13 @@ class GoogleTranslateProvider(TranslationProvider):
         """Get list of supported models."""
         return ["nmt"]
     
+    def get_rate_limits(self) -> Dict[str, int]:
+        """Get rate limits for the provider."""
+        return {
+            "requests_per_minute": 1000,
+            "characters_per_minute": 1000000
+        }
+    
     def get_supported_languages(self) -> List[str]:
         """Get list of supported language codes."""
         # Google Translate supports a large number of languages
@@ -71,6 +78,29 @@ class GoogleTranslateProvider(TranslationProvider):
             'pl', 'ps', 'pt', 'ro', 'ru', 'rw', 'si', 'sk', 'sl', 'sm', 'sn', 'so', 'sq', 'sr', 'st', 'su', 'sv', 'sw',
             'ta', 'te', 'tg', 'th', 'tk', 'tl', 'tr', 'tt', 'ug', 'uk', 'ur', 'uz', 'vi', 'xh', 'yi', 'yo', 'zh', 'zu'
         ]
+    
+    def get_features(self) -> List[str]:
+        """Get the features supported by this provider."""
+        return [
+            "text_translation",
+            "language_detection",
+            "batch_translation"
+        ]
+    
+    def get_provider_info(self) -> Dict[str, Any]:
+        """Get information about the provider."""
+        return {
+            "id": "google_translate",
+            "name": "Google Translate",
+            "version": "v2",
+            "api_type": "REST",
+            "documentation_url": "https://cloud.google.com/translate/docs/reference/rest/v2/translate",
+            "service_type": "translation",
+            "rate_limits": self.get_rate_limits(),
+            "supported_models": self.get_supported_models(),
+            "default_model": self.get_default_model(),
+            "features": self.get_features()
+        }
     
     @retry()
     def translate(self, request: TranslationRequest) -> TranslationResponse:
@@ -122,7 +152,8 @@ class GoogleTranslateProvider(TranslationProvider):
                 metadata=request.metadata,
                 timestamp=time.time(),
                 latency=time.time() - start_time,
-                success=True
+                success=True,
+                format=request.format
             )
             
         except Exception as e:
@@ -134,7 +165,8 @@ class GoogleTranslateProvider(TranslationProvider):
                 timestamp=time.time(),
                 latency=time.time() - start_time,
                 success=False,
-                error=str(e)
+                error=str(e),
+                format=request.format
             )
     
     @async_retry()
@@ -194,7 +226,8 @@ class GoogleTranslateProvider(TranslationProvider):
                                 metadata=item.metadata,
                                 timestamp=time.time(),
                                 latency=batch_response.latency,
-                                success=True
+                                success=True,
+                                format=item.format
                             )
                             responses.append(response)
                 else:
@@ -216,7 +249,8 @@ class GoogleTranslateProvider(TranslationProvider):
                             timestamp=time.time(),
                             latency=0,
                             success=False,
-                            error=batch_response.error
+                            error=batch_response.error,
+                            format=item.format
                         )
                         responses.append(response)
                     
@@ -238,7 +272,8 @@ class GoogleTranslateProvider(TranslationProvider):
                         timestamp=time.time(),
                         latency=0,
                         success=False,
-                        error=str(e)
+                        error=str(e),
+                        format=item.format
                     )
                     responses.append(response)
         
@@ -302,6 +337,29 @@ class GeminiProvider(LLMProvider):
         # Gemini supports many languages but there's no official list
         # This is a subset of commonly supported languages
         return ["en", "es", "fr", "de", "it", "pt", "nl", "pl", "ru", "zh", "ja", "ko", "ar", "hi"]
+    
+    def get_features(self) -> List[str]:
+        """Get the features supported by this provider."""
+        return [
+            "text_generation",
+            "streaming",
+            "system_prompts",
+            "json_output"
+        ]
+    
+    def get_provider_info(self) -> Dict[str, Any]:
+        """Get information about the provider."""
+        return {
+            "id": "gemini",
+            "name": "Google Gemini",
+            "version": "1.0",
+            "api_type": "API",
+            "documentation_url": "https://ai.google.dev/",
+            "service_type": "llm",
+            "supported_models": self.get_supported_models(),
+            "default_model": self.get_default_model(),
+            "features": self.get_features()
+        }
     
     def _prepare_gemini_request(self, request: LLMRequest) -> dict:
         """Prepare parameters for Gemini API call."""

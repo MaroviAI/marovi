@@ -4,51 +4,100 @@ LLM and translation provider implementations.
 This module contains implementations for various LLM and translation providers.
 """
 
+# Import only base classes at module level to avoid circular imports
 from .base import LLMProvider, TranslationProvider, Provider
-from .openai import OpenAIProvider
-from .anthropic import AnthropicProvider
-# Handle optional dependencies with try/except
-try:
-    from .google import GoogleTranslateProvider, GeminiProvider
-    _has_google = True
-except ImportError:
-    _has_google = False
-    # Define stub classes that raise errors when used
-    class GoogleTranslateProvider:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("Google Translate provider requires the 'requests' package")
-            
-    class GeminiProvider:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("Gemini provider requires the 'google.generativeai' package")
+from .provider_registry import provider_registry
 
-# Handle REST-based Google providers
-try:
-    from .google_rest import GoogleTranslateRestProvider, GeminiRestProvider
-    _has_google_rest = True
-except ImportError:
-    _has_google_rest = False
-    # Define stub classes that raise errors when used
-    class GoogleTranslateRestProvider:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("GoogleTranslateRestProvider requires the 'requests' package")
-            
-    class GeminiRestProvider:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("GeminiRestProvider requires the 'google.generativeai' package")
+# Use lazy imports for concrete provider implementations to avoid circular imports
+def get_openai_provider():
+    from .openai import OpenAIProvider
+    return OpenAIProvider
 
-# Handle DeepL dependency            
-try:
+def get_anthropic_provider():
+    from .anthropic import AnthropicProvider
+    return AnthropicProvider
+
+def get_google_translate_provider():
+    from .google import GoogleTranslateProvider
+    return GoogleTranslateProvider
+
+def get_gemini_provider():
+    from .google import GeminiProvider
+    return GeminiProvider
+
+def get_google_translate_rest_provider():
+    from .google_rest import GoogleTranslateRestProvider
+    return GoogleTranslateRestProvider
+
+def get_gemini_rest_provider():
+    from .google_rest import GeminiRestProvider
+    return GeminiRestProvider
+
+def get_deepl_provider():
     from .deepl import DeepLProvider
-    _has_deepl = True
-except ImportError:
-    _has_deepl = False
-    # Define stub class that raises error when used
-    class DeepLProvider:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("DeepL provider requires the 'requests' package")
+    return DeepLProvider
 
-from .custom import ChatGPTTranslationProvider
+def register_default_providers(router):
+    """
+    Register all default providers with a router.
+    
+    This function will register providers and raise an exception if any provider
+    cannot be initialized due to implementation issues.
+    
+    Args:
+        router: Router instance to register providers with
+        
+    Returns:
+        True if any providers were registered successfully
+    """
+    import logging
+    import inspect
+    logger = logging.getLogger(__name__)
+    
+    # Track if we registered any providers successfully
+    registered_any_provider = False
+    
+    # Register OpenAI provider (defaults for both LLM and translation)
+    try:
+        openai_provider = get_openai_provider()()
+        router.add_provider(openai_provider)
+        registered_any_provider = True
+    except Exception as e:
+        logger.warning(f"Failed to register OpenAI provider: {e}")
+    
+    # Register Google Translate provider
+    try:
+        GoogleTranslateProvider = get_google_translate_provider()
+        if not inspect.isabstract(GoogleTranslateProvider):
+            router.add_provider(GoogleTranslateProvider())
+            registered_any_provider = True
+    except Exception as e:
+        logger.warning(f"Failed to register Google Translate provider: {e}")
+    
+    # Register DeepL provider
+    try:
+        DeepLProvider = get_deepl_provider()
+        if not inspect.isabstract(DeepLProvider):
+            router.add_provider(DeepLProvider())
+            registered_any_provider = True
+    except Exception as e:
+        logger.warning(f"Failed to register DeepL provider: {e}")
+    
+    # Log a warning if no providers were registered
+    if not registered_any_provider:
+        logger.warning("No providers were registered. The API will have limited functionality.")
+        
+    return registered_any_provider
+
+# Create class aliases to make them directly importable 
+# This preserves lazy imports while allowing direct imports like "from ..providers import GoogleTranslateProvider"
+GoogleTranslateProvider = get_google_translate_provider()
+GeminiProvider = get_gemini_provider()
+OpenAIProvider = get_openai_provider()
+AnthropicProvider = get_anthropic_provider()
+DeepLProvider = get_deepl_provider()
+GoogleTranslateRestProvider = get_google_translate_rest_provider()
+GeminiRestProvider = get_gemini_rest_provider()
 
 __all__ = [
     # Base classes
@@ -56,15 +105,27 @@ __all__ = [
     "LLMProvider",
     "TranslationProvider",
     
-    # LLM providers
-    "OpenAIProvider",
-    "AnthropicProvider",
-    "GeminiProvider",
-    "GeminiRestProvider",
+    # Provider registry
+    "provider_registry",
     
-    # Translation providers
+    # Functions
+    "register_default_providers",
+    
+    # Provider getters
+    "get_openai_provider",
+    "get_anthropic_provider",
+    "get_google_translate_provider",
+    "get_gemini_provider",
+    "get_google_translate_rest_provider",
+    "get_gemini_rest_provider",
+    "get_deepl_provider",
+    
+    # Provider classes
     "GoogleTranslateProvider",
-    "GoogleTranslateRestProvider",
+    "GeminiProvider",
+    "OpenAIProvider",
+    "AnthropicProvider", 
     "DeepLProvider",
-    "ChatGPTTranslationProvider"
+    "GoogleTranslateRestProvider",
+    "GeminiRestProvider"
 ]

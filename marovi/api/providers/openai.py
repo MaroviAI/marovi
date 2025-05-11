@@ -7,15 +7,12 @@ This module provides the OpenAIProvider class for interacting with OpenAI's API.
 import os
 import time
 import logging
-import json
 from typing import List, Dict, Optional, Type, Any, AsyncIterator
 
-import openai
 from openai import OpenAI, AsyncOpenAI
 from pydantic import BaseModel
 
 from ..schemas.llm import LLMRequest, LLMResponse
-from ..schemas.translation import TranslationFormat
 from .base import LLMProvider
 
 # Configure logging
@@ -56,19 +53,61 @@ class OpenAIProvider(LLMProvider):
         # OpenAI doesn't have a concept of language codes since it's not a translation service
         return ["en"]  # Return English as default
     
-    def get_supported_formats(self) -> List[TranslationFormat]:
-        """Get list of supported translation formats."""
+    def get_features(self) -> List[str]:
+        """Get the features supported by this provider."""
         return [
-            TranslationFormat.TEXT,
-            TranslationFormat.HTML,
-            TranslationFormat.MARKDOWN,
-            TranslationFormat.JSON,
-            TranslationFormat.XML
+            "chat_completions",
+            "streaming",
+            "json_mode",
+            "function_calling",
+            "vision"
         ]
     
-    def get_quality_metrics(self) -> List[str]:
-        """Get list of supported quality metrics."""
-        return ["confidence", "fluency", "adequacy", "terminology"]
+    def get_provider_info(self) -> Dict[str, Any]:
+        """Get information about the provider."""
+        return {
+            "id": "openai",
+            "name": "OpenAI",
+            "description": "OpenAI API provider for text and chat completion",
+            "website": "https://openai.com",
+            "auth_type": "api_key",
+            "services": [
+                {
+                    "type": "llm",
+                    "models": [
+                        {
+                            "name": "gpt-4o-2024-08-06",
+                            "description": "Most advanced GPT-4 model with vision capabilities",
+                            "max_tokens": 128000,
+                            "supports_streaming": True,
+                            "supports_json_mode": True
+                        },
+                        {
+                            "name": "gpt-4o-mini-2024-07-18",
+                            "description": "Smaller, faster GPT-4 model with good performance and lower cost",
+                            "max_tokens": 128000,
+                            "supports_streaming": True,
+                            "supports_json_mode": True
+                        },
+                        {
+                            "name": "gpt-4-turbo-2024-04-09",
+                            "description": "Previous generation GPT-4 model",
+                            "max_tokens": 128000,
+                            "supports_streaming": True,
+                            "supports_json_mode": True
+                        },
+                        {
+                            "name": "gpt-3.5-turbo-0125",
+                            "description": "Efficient GPT-3.5 model",
+                            "max_tokens": 16385,
+                            "supports_streaming": True,
+                            "supports_json_mode": True
+                        }
+                    ],
+                    "features": self.get_features()
+                }
+            ]
+        }
     
     def get_rate_limits(self) -> Dict[str, Any]:
         """Get rate limits and quotas for this provider."""
@@ -215,12 +254,13 @@ class OpenAIProvider(LLMProvider):
         params["stream"] = True
         
         try:
-            stream = await self.async_client.chat.completions.create(**params)
-            async for chunk in stream:
+            response_stream = await self.async_client.chat.completions.create(**params)
+            
+            async for chunk in response_stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         except Exception as e:
-            logger.error(f"OpenAI streaming API call failed: {str(e)}")
+            logger.error(f"OpenAI streaming failed: {str(e)}")
             raise
             
     def batch_complete(self, requests: List[LLMRequest], response_model: Optional[Type[BaseModel]] = None) -> List[LLMResponse]:

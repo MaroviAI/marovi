@@ -8,10 +8,10 @@ providers with support for batching, retries, and comprehensive observability.
 import time
 import logging
 import asyncio
-from typing import List, Dict, Optional, Union, Type
-from enum import Enum
+from typing import List, Dict, Optional, Union, Type, Any
 
-from .providers.base import TranslationProvider, TranslationRequest, TranslationResponse
+from ..providers.base import TranslationProvider, TranslationRequest, TranslationResponse
+from ..config import get_api_key
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,12 +21,13 @@ class TranslationError(Exception):
     """Exception raised for translation errors."""
     pass
 
-class ProviderType(Enum):
-    """Supported translation providers."""
-    GOOGLE = "google"
-    GOOGLE_REST = "google_rest"
-    DEEPL = "deepl"
-    CUSTOM = "custom"
+# Valid provider strings
+PROVIDER_GOOGLE = "google"
+PROVIDER_GOOGLE_REST = "google_rest"
+PROVIDER_DEEPL = "deepl"
+PROVIDER_CUSTOM = "custom"
+
+VALID_PROVIDERS = [PROVIDER_GOOGLE, PROVIDER_GOOGLE_REST, PROVIDER_DEEPL, PROVIDER_CUSTOM]
 
 # Default retry configuration
 DEFAULT_RETRY_CONFIG = {
@@ -42,6 +43,53 @@ DEFAULT_RETRY_CONFIG = {
     ]
 }
 
+# Global default provider and client cache
+_default_provider = PROVIDER_GOOGLE
+_client_cache: Dict[str, 'TranslationClient'] = {}
+
+def set_default_provider(provider: str):
+    """
+    Set the default translation provider for the application.
+    
+    Args:
+        provider: Provider identifier string
+    
+    Raises:
+        ValueError: If provider is not valid
+    """
+    global _default_provider
+    
+    if provider not in VALID_PROVIDERS:
+        raise ValueError(f"Unknown provider: {provider}. Valid options are: {VALID_PROVIDERS}")
+    
+    _default_provider = provider
+    logger.info(f"Default provider set to {_default_provider}")
+
+def get_client(provider: Optional[str] = None) -> 'TranslationClient':
+    """
+    Get a translation client for the specified provider.
+    
+    Args:
+        provider: Provider identifier string (uses default if None)
+        
+    Returns:
+        TranslationClient instance
+        
+    Raises:
+        ValueError: If provider is not valid
+    """
+    global _client_cache, _default_provider
+    
+    provider = provider or _default_provider
+    
+    if provider not in VALID_PROVIDERS:
+        raise ValueError(f"Unknown provider: {provider}. Valid options are: {VALID_PROVIDERS}")
+    
+    if provider not in _client_cache:
+        _client_cache[provider] = TranslationClient(provider=provider)
+    
+    return _client_cache[provider]
+
 class TranslationClient:
     """
     A unified client for interacting with various translation providers.
@@ -50,58 +98,57 @@ class TranslationClient:
     - Support for multiple providers (Google Translate, DeepL, etc.)
     - Batch translation support
     - Async and sync interfaces
-    - Automatic logging to pipeline context
+    - Automatic logging
     - Comprehensive observability
     - Retry logic for transient failures
     """
     
-    def __init__(self, 
-                provider: Union[str, ProviderType] = ProviderType.GOOGLE,
-                api_key: Optional[str] = None,
+    def __init__(self, provider: str = PROVIDER_GOOGLE, api_key: Optional[str] = None, 
                 custom_provider: Optional[TranslationProvider] = None,
                 retry_config: Optional[Dict] = None):
         """
         Initialize a translation client.
         
         Args:
-            provider: Provider type or name
-            api_key: Optional API key
+            provider: Provider identifier string
+            api_key: Optional API key (if None, will be fetched from config)
             custom_provider: Optional custom provider implementation
             retry_config: Configuration for retry logic
+            
+        Raises:
+            ValueError: If provider is not valid
         """
-        # Convert string provider to enum
-        if isinstance(provider, str):
-            try:
-                self.provider_type = ProviderType(provider)
-            except ValueError:
-                raise ValueError(f"Unknown provider: {provider}")
-        else:
-            self.provider_type = provider
+        self.provider_type = provider
+        
+        if provider not in VALID_PROVIDERS:
+            raise ValueError(f"Unknown provider: {provider}. Valid options are: {VALID_PROVIDERS}")
+        
+        # Get API key from config if not provided
+        if api_key is None and provider != PROVIDER_CUSTOM:
+            api_key = get_api_key(provider)
         
         # Initialize the provider
         if custom_provider:
             self.provider = custom_provider
         else:
-            if self.provider_type == ProviderType.GOOGLE:
-                from .providers import GoogleTranslateProvider
+            if provider == PROVIDER_GOOGLE:
+                from ..providers import GoogleTranslateProvider
                 self.provider = GoogleTranslateProvider(api_key=api_key)
-            elif self.provider_type == ProviderType.GOOGLE_REST:
-                from .providers import GoogleTranslateRestProvider
+            elif provider == PROVIDER_GOOGLE_REST:
+                from ..providers import GoogleTranslateRestProvider
                 self.provider = GoogleTranslateRestProvider(api_key=api_key)
-            elif self.provider_type == ProviderType.DEEPL:
-                from .providers import DeepLProvider
+            elif provider == PROVIDER_DEEPL:
+                from ..providers import DeepLProvider
                 self.provider = DeepLProvider(api_key=api_key)
+            elif provider == PROVIDER_CUSTOM:
+                raise ValueError("Custom provider requires a provider implementation")
             else:
-                raise ValueError(f"Unsupported provider: {self.provider_type}")
+                raise ValueError(f"Unsupported provider: {provider}")
         
         # Set retry configuration
-        self.retry_config = retry_config or {
-            "max_retries": 3,
-            "base_delay": 1,
-            "max_delay": 10
-        }
+        self.retry_config = retry_config or DEFAULT_RETRY_CONFIG
         
-        logger.info(f"Initialized TranslationClient with provider={self.provider_type.value}")
+        logger.info(f"Initialized TranslationClient with provider={provider}")
     
     def _should_retry(self, error: Exception, attempt: int) -> bool:
         """
@@ -151,7 +198,7 @@ class TranslationClient:
                  text: Union[str, List[str]], 
                  source_lang: str, 
                  target_lang: str,
-                 step_name: Optional[str] = None) -> Union[str, List[str]]:
+                 provider: Optional[str] = None) -> Union[str, List[str]]:
         """
         Translate text from one language to another.
         
@@ -159,22 +206,27 @@ class TranslationClient:
             text: Text to translate (string or list of strings)
             source_lang: Source language code
             target_lang: Target language code
-            step_name: Name of the step (for context logging)
+            provider: Optional provider override for this call
             
         Returns:
             Translated text (string or list of strings)
+            
+        Raises:
+            TranslationError: If translation fails
+            ValueError: If provider is not valid
         """
+        # If a different provider is specified, use that client instead
+        if provider is not None and provider != self.provider_type:
+            return get_client(provider).translate(text, source_lang, target_lang)
+            
         start_time = time.time()
-        
-        # Prepare metadata
-        metadata = {"step_name": step_name} if step_name else None
         
         # Prepare request
         request = TranslationRequest(
             text=text,
             source_lang=source_lang,
             target_lang=target_lang,
-            metadata=metadata
+            metadata=None
         )
         
         # Track attempts for retry logic
@@ -190,18 +242,16 @@ class TranslationClient:
                 if not response.success:
                     raise TranslationError(response.error or "Translation failed without specific error")
                 
-                # Log success if context provided
-                if step_name:
-                    logger.info(f"Translation successful: {self.provider_type.value}, "
-                                f"source={source_lang}, target={target_lang}, "
-                                f"latency: {time.time() - start_time:.2f}s")
+                logger.info(f"Translation successful: {self.provider_type}, "
+                            f"source={source_lang}, target={target_lang}, "
+                            f"latency: {time.time() - start_time:.2f}s")
                 
                 # Return translated text
                 return response.content
                 
             except Exception as e:
                 # Log error
-                logger.error(f"Translation error: {self.provider_type.value}, "
+                logger.error(f"Translation error: {self.provider_type}, "
                              f"source={source_lang}, target={target_lang}, "
                              f"attempt {attempt}/{max_retries}, error: {str(e)}")
                 
@@ -222,7 +272,7 @@ class TranslationClient:
                         text: Union[str, List[str]], 
                         source_lang: str, 
                         target_lang: str,
-                        step_name: Optional[str] = None) -> Union[str, List[str]]:
+                        provider: Optional[str] = None) -> Union[str, List[str]]:
         """
         Translate text from one language to another asynchronously.
         
@@ -230,22 +280,27 @@ class TranslationClient:
             text: Text to translate (string or list of strings)
             source_lang: Source language code
             target_lang: Target language code
-            step_name: Name of the step (for context logging)
+            provider: Optional provider override for this call
             
         Returns:
             Translated text (string or list of strings)
+            
+        Raises:
+            TranslationError: If translation fails
+            ValueError: If provider is not valid
         """
+        # If a different provider is specified, use that client instead
+        if provider is not None and provider != self.provider_type:
+            return await get_client(provider).atranslate(text, source_lang, target_lang)
+            
         start_time = time.time()
-        
-        # Prepare metadata
-        metadata = {"step_name": step_name} if step_name else None
         
         # Prepare request
         request = TranslationRequest(
             text=text,
             source_lang=source_lang,
             target_lang=target_lang,
-            metadata=metadata
+            metadata=None
         )
         
         # Track attempts for retry logic
@@ -261,11 +316,9 @@ class TranslationClient:
                 if not response.success:
                     raise TranslationError(response.error or "Translation failed without specific error")
                 
-                # Log success if context provided
-                if step_name:
-                    logger.info(f"Async translation successful: {self.provider_type.value}, "
-                                f"source={source_lang}, target={target_lang}, "
-                                f"latency: {time.time() - start_time:.2f}s")
+                logger.info(f"Async translation successful: {self.provider_type}, "
+                            f"source={source_lang}, target={target_lang}, "
+                            f"latency: {time.time() - start_time:.2f}s")
                 
                 # Return translated text
                 return response.content
@@ -291,8 +344,8 @@ class TranslationClient:
                        texts: List[str],
                        source_lang: str,
                        target_lang: str,
-                       step_name: Optional[str] = None,
-                       max_concurrency: int = 5) -> List[str]:
+                       max_concurrency: int = 5,
+                       provider: Optional[str] = None) -> List[str]:
         """
         Translate multiple texts in batch.
         
@@ -300,12 +353,20 @@ class TranslationClient:
             texts: List of texts to translate
             source_lang: Source language code
             target_lang: Target language code
-            step_name: Name of the step (for context logging)
             max_concurrency: Maximum number of concurrent requests
+            provider: Optional provider override for this call
             
         Returns:
             List of translated texts
+            
+        Raises:
+            TranslationError: If translation fails
+            ValueError: If provider is not valid
         """
+        # If a different provider is specified, use that client instead
+        if provider is not None and provider != self.provider_type:
+            return get_client(provider).batch_translate(texts, source_lang, target_lang, max_concurrency)
+            
         batch_start_time = time.time()
         
         # Prepare requests
@@ -314,7 +375,7 @@ class TranslationClient:
                 text=text,
                 source_lang=source_lang,
                 target_lang=target_lang,
-                metadata={"step_name": f"{step_name}_{i}"} if step_name else None
+                metadata=None
             )
             for i, text in enumerate(texts)
         ]
@@ -326,23 +387,10 @@ class TranslationClient:
             batch_results = self.provider.batch_translate(batch)
             results.extend(batch_results)
         
-        # Log batch metrics if context provided
-        if step_name:
-            batch_time = time.time() - batch_start_time
-            
-            logger.info(f"Batch translation completed: {self.provider_type.value}, "
-                       f"source={source_lang}, target={target_lang}, "
-                       f"total_time: {batch_time:.2f}s, avg_time: {batch_time / len(texts):.2f}s, batch_size: {len(texts)}")
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(texts),
-                "batch_size": len(texts),
-                "concurrent_limit": max_concurrency
-            }
-            
-            logger.info(f"Batch translation summary: {batch_info}")
+        batch_time = time.time() - batch_start_time
+        logger.info(f"Batch translation completed: {self.provider_type}, "
+                   f"source={source_lang}, target={target_lang}, "
+                   f"total_time: {batch_time:.2f}s, batch_size: {len(texts)}")
         
         # Extract translated texts from responses
         translated_texts = [r.content for r in results]
@@ -352,8 +400,8 @@ class TranslationClient:
                              texts: List[str],
                              source_lang: str,
                              target_lang: str,
-                             step_name: Optional[str] = None,
-                             max_concurrency: int = 5) -> List[str]:
+                             max_concurrency: int = 5,
+                             provider: Optional[str] = None) -> List[str]:
         """
         Translate multiple texts asynchronously in batch.
         
@@ -361,12 +409,20 @@ class TranslationClient:
             texts: List of texts to translate
             source_lang: Source language code
             target_lang: Target language code
-            step_name: Name of the step (for context logging)
             max_concurrency: Maximum number of concurrent requests
+            provider: Optional provider override for this call
             
         Returns:
             List of translated texts
+            
+        Raises:
+            TranslationError: If translation fails
+            ValueError: If provider is not valid
         """
+        # If a different provider is specified, use that client instead
+        if provider is not None and provider != self.provider_type:
+            return await get_client(provider).abatch_translate(texts, source_lang, target_lang, max_concurrency)
+            
         batch_start_time = time.time()
         
         # Prepare requests
@@ -375,7 +431,7 @@ class TranslationClient:
                 text=text,
                 source_lang=source_lang,
                 target_lang=target_lang,
-                metadata={"step_name": f"{step_name}_{i}"} if step_name else None
+                metadata=None
             )
             for i, text in enumerate(texts)
         ]
@@ -387,23 +443,10 @@ class TranslationClient:
             batch_results = await self.provider.abatch_translate(batch)
             results.extend(batch_results)
         
-        # Log batch metrics if context provided
-        if step_name:
-            batch_time = time.time() - batch_start_time
-            
-            logger.info(f"Batch translation completed: {self.provider_type.value}, "
-                       f"source={source_lang}, target={target_lang}, "
-                       f"total_time: {batch_time:.2f}s, avg_time: {batch_time / len(texts):.2f}s, batch_size: {len(texts)}")
-            
-            # Log detailed batch info
-            batch_info = {
-                "total_time": batch_time,
-                "avg_time": batch_time / len(texts),
-                "batch_size": len(texts),
-                "concurrent_limit": max_concurrency
-            }
-            
-            logger.info(f"Batch translation summary: {batch_info}")
+        batch_time = time.time() - batch_start_time
+        logger.info(f"Async batch translation completed: {self.provider_type}, "
+                   f"source={source_lang}, target={target_lang}, "
+                   f"total_time: {batch_time:.2f}s, batch_size: {len(texts)}")
         
         # Extract translated texts from responses
         translated_texts = [r.content for r in results]
@@ -414,25 +457,17 @@ class TranslationClient:
         return self.provider.get_supported_languages()
 
 
-def create_translation_client(provider: Union[str, ProviderType] = ProviderType.GOOGLE,
-                            api_key: Optional[str] = None,
-                            custom_provider: Optional[TranslationProvider] = None,
-                            retry_config: Optional[Dict] = None) -> TranslationClient:
+def create_translation_client(provider: Optional[str] = None) -> TranslationClient:
     """
-    Factory function to create a translation client with optimized configuration.
+    Factory function to create a translation client.
     
     Args:
-        provider: Translation provider ("google", "deepl", or ProviderType enum)
-        api_key: Optional API key (if not provided, will use environment variables)
-        custom_provider: Optional custom provider implementation
-        retry_config: Configuration for retry logic
+        provider: Translation provider identifier (uses default if None)
         
     Returns:
         TranslationClient instance
+        
+    Raises:
+        ValueError: If provider is not valid
     """
-    return TranslationClient(
-        provider=provider,
-        api_key=api_key,
-        custom_provider=custom_provider,
-        retry_config=retry_config
-    )
+    return get_client(provider)

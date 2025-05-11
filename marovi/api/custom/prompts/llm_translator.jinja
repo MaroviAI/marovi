@@ -1,0 +1,28 @@
+I need to translate the following text from {{ source_lang }} to {{ target_lang }}:
+
+{{ text }}
+
+{% if preserve_formatting %}
+Please preserve the original formatting, including line breaks, bullet points, and any special characters.
+{% endif %}
+
+{% if format == "markdown" %}
+The text is in Markdown format. Please maintain the markdown syntax in the translation.
+{% elif format == "html" %}
+The text is in HTML format. Please maintain the HTML tags in the translation.
+{% elif format == "xml" %}
+The text is in XML format. Please maintain the XML tags in the translation.
+{% elif format == "json" %}
+The text is in JSON format. Please maintain the JSON structure in the translation.
+{% endif %}
+
+{% if domain %}
+This text is from the {{ domain }} domain.
+{% endif %}
+
+Provide the translation in the following JSON format:
+{
+  "translated_text": "translated text here",
+  "confidence": 0.95,  // confidence score between 0 and 1
+  "detected_language": "{{ source_lang }}"  // only if auto-detection was requested
+} 

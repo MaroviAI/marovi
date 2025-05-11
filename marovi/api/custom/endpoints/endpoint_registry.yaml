@@ -1,0 +1,52 @@
+# Custom Endpoint Registry
+# This file provides a centralized registry of all custom endpoints, their capabilities,
+# implementations, and associated prompts.
+
+endpoints:
+  # Translation Endpoints
+  llm_translate:
+    name: "LLM Translate"
+    description: "Translation using LLM models"
+    implementation: "LLMTranslate"
+    base_class: "BaseTranslator"
+    input_schema: marovi.api.schemas.TranslationRequest
+    output_schema: marovi.api.schemas.TranslationResponse  
+    capabilities:
+      - translate
+    supported_providers:
+      - openai
+    prompts:
+      template: "translation/llm_translate.jinja"
+    metadata:
+      uses_chat: true
+      supports_batch: true
+
+  # Format Conversion Endpoints
+  convert_format:
+    name: "Format Converter"
+    description: "Convert text between different formats (HTML, Markdown, Wiki, LaTeX, etc.)"
+    implementation: "FormatConverter"
+    base_class: "CustomEndpoint"
+    input_schema: marovi.api.custom.schemas.FormatConversionRequest
+    output_schema: marovi.api.custom.schemas.FormatConversionResponse
+    capabilities:
+      - format_conversion
+    supported_providers:
+      - openai
+      - anthropic
+    prompts:
+      template: "convert_format.jinja"
+    metadata:
+      uses_llm: true
+      supports_batch: false
+
+  # Text Summarization endpoint
+  summarize:
+    class: marovi.api.custom.endpoints.summarize.Summarizer
+    endpoint_name: summarize
+    description: "Text summarization with various styles and parameters"
+    request_schema: marovi.api.custom.schemas.SummarizationRequest
+    response_schema: marovi.api.custom.schemas.SummarizationResponse
+    main_method: summarize
+    callable: true
+

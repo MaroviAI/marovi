@@ -1,0 +1,51 @@
+I need to convert the following text from {{ source_format }} format to {{ target_format }} format:
+
+{{ text }}
+
+{% if preserve_structure %}
+Please preserve the document structure, including headings, sections, lists, tables, and any other structural elements.
+{% endif %}
+
+{% if preserve_links %}
+Please preserve all links. Make sure URLs are properly formatted according to the target format's syntax.
+{% endif %}
+
+{% if preserve_images %}
+Please preserve all image references. Convert image tags/references to the appropriate syntax for the target format.
+{% endif %}
+
+{% if source_format == "html" %}
+The input is in HTML format. Parse all HTML elements and convert them to the appropriate constructs in {{ target_format }}.
+{% elif source_format == "markdown" or source_format == "md" %}
+The input is in Markdown format. Parse all Markdown syntax and convert to {{ target_format }} equivalent.
+{% elif source_format == "wiki" %}
+The input is in Wiki markup format. Parse the Wiki syntax and convert to {{ target_format }} equivalent.
+{% elif source_format == "latex" or source_format == "tex" %}
+The input is in LaTeX format. Parse the LaTeX commands and structures and convert to {{ target_format }} equivalent.
+{% elif source_format == "rst" %}
+The input is in reStructuredText format. Parse the RST syntax and convert to {{ target_format }} equivalent.
+{% elif source_format == "org" %}
+The input is in Org mode format. Parse the Org syntax and convert to {{ target_format }} equivalent.
+{% elif source_format == "asciidoc" %}
+The input is in AsciiDoc format. Parse the AsciiDoc syntax and convert to {{ target_format }} equivalent.
+{% endif %}
+
+{% if target_format == "html" %}
+The output should be valid HTML. Use appropriate HTML elements for structure. Make sure all HTML tags are properly closed.
+{% elif target_format == "markdown" or target_format == "md" %}
+The output should be valid Markdown. Use standard Markdown syntax (not a specialized flavor unless otherwise specified).
+{% elif target_format == "wiki" %}
+The output should be in Wiki markup format, compatible with most wiki systems.
+{% elif target_format == "latex" or target_format == "tex" %}
+The output should be valid LaTeX code that could be compiled into a PDF document.
+{% elif target_format == "rst" %}
+The output should be valid reStructuredText.
+{% elif target_format == "org" %}
+The output should be valid Org mode syntax.
+{% elif target_format == "asciidoc" %}
+The output should be valid AsciiDoc syntax.
+{% elif target_format == "plain" or target_format == "text" %}
+The output should be plain text with no formatting codes, but preserve paragraph breaks.
+{% endif %}
+
+Provide only the converted text in the target format without any explanations or meta-comments. The output should be ready to use directly in the target format.

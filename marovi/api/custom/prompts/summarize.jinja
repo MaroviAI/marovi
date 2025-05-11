@@ -1,0 +1,38 @@
+I need to create a summary of the following text:
+
+{{ text }}
+
+{% if style == "bullet" %}
+Please provide a bullet-point summary with the main ideas and key points.
+{% elif style == "paragraph" %}
+Please provide a concise paragraph summary that captures the essence of the text.
+{% elif style == "structured" %}
+Please provide a structured summary with sections for main topics, key points, and conclusions.
+{% else %}
+Please provide a concise summary that captures the essence of the text.
+{% endif %}
+
+{% if max_length %}
+The summary should be approximately {{ max_length }} words long.
+{% endif %}
+
+{% if include_keywords %}
+Include a list of key terms or keywords at the end of the summary.
+{% endif %}
+
+{% if preserve_quotes %}
+Preserve important quotes from the original text in the summary.
+{% endif %}
+
+{% if language and language != "en" %}
+Provide the summary in {{ language }} language.
+{% endif %}
+
+Ensure the summary is:
+- Accurate and faithful to the original text
+- Concise but comprehensive
+- Well-organized{% if style == "structured" %} with clear sections{% endif %}
+- Focused on the most important information
+{% if style == "bullet" %}- Formatted as bullet points for easy reading{% endif %}
+
+Return the summary {% if style == "structured" %}with appropriate headings and structure{% endif %}. 
