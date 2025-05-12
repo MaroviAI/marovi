@@ -1,10 +1,10 @@
-# Marovi API
+# Marovi AI
 
 **The open source engine powering [https://marovi.ai](https://marovi.ai)**
 
-Marovi API is a modular, enterprise-ready platform that unifies access to AI services like LLMs and translation across providers such as OpenAI, Google, DeepL, and Anthropic. It offers a single, streamlined API layer for managing these services and defining custom endpoints.
+The Marovi API is a modular, enterprise-ready platform that unifies access to AI services like LLMs and translation across providers such as OpenAI, Google, DeepL, and Anthropic. It offers a single, streamlined API layer for managing these services and defining custom endpoints.
 
-This is the same infrastructure used by Marovi.ai to:
+This is the same infrastructure used by marovi.ai to:
 - Translate and summarize AI research papers
 - Build a multilingual, LLM-enhanced wiki for research comprehension
 - Benchmark translation providers
