@@ -62,27 +62,20 @@ class Summarizer(CustomEndpoint):
             logger.error(f"Failed to get default LLM client: {str(e)}")
             raise ValueError("No LLM client provided and could not get default client from router")
     
-    def __call__(self, text, style="concise", **kwargs):
+    def __call__(self, request):
         """
-        Summarize text with the given style and options.
+        Process a summarization request.
         
         Args:
-            text: Text to summarize
-            style: Summary style (bullet, paragraph, structured, concise)
-            **kwargs: Additional options for the summarization
+            request: SummarizationRequest instance
             
         Returns:
             SummarizationResponse instance
         """
-        # Create request data
-        request_data = {
-            "text": text,
-            "style": style
-        }
-        request_data.update(kwargs)
-        
-        # Call the process method
-        return self.summarize(request_data)
+        # This method is required by the CustomEndpoint base class
+        if isinstance(request, dict):
+            request = SummarizationRequest(**request)
+        return self.summarize(request)
     
     def _count_words(self, text):
         """Count the number of words in text."""

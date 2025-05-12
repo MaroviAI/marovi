@@ -50,20 +50,18 @@ class FormatConverter(CustomEndpoint):
             with open(self.template_path, 'r') as f:
                 self.template = f.read()
         
-    def __call__(self, text: str, source_format: str, target_format: str, **kwargs) -> FormatConversionResponse:
+    def __call__(self, request) -> FormatConversionResponse:
         """
         Convert text from one format to another.
         
         Args:
-            text: Text to convert
-            source_format: Source format code (html, md, wiki, etc.)
-            target_format: Target format code
-            **kwargs: Additional parameters like model, temperature
-            
+            request: FormatConversionRequest instance
         Returns:
             FormatConversionResponse with converted text and metadata
         """
-        return self.convert(text, source_format, target_format, **kwargs)
+        if isinstance(request, dict):
+            request = FormatConversionRequest(**request)
+        return self.process(request)
     
     def _get_llm_client(self):
         """
