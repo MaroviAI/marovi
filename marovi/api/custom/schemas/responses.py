@@ -38,6 +38,20 @@ class FormatConversionResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if conversion failed")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the conversion")
 
+# Clean text response
+class CleanTextResponse(BaseModel):
+    """
+    Response schema for text cleaning.
+    
+    This model defines the output structure for text cleaning results.
+    """
+    text: str = Field(..., description="The original text content")
+    cleaned_text: str = Field(..., description="The cleaned text content")
+    format: str = Field(..., description="The format of the text")
+    success: bool = Field(True, description="Whether the cleaning was successful")
+    error: Optional[str] = Field(None, description="Error message if cleaning failed")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the cleaning process")
+
 # Summarization response
 class SummarizationResponse(BaseModel):
     """

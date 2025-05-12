@@ -1,0 +1,84 @@
+You are an expert in text cleaning and formatting. Your task is to clean up the following {{ format }} text and remove any artifacts, unnecessary markup, or leftover tags while preserving essential content and structure.
+
+{% if format == "wiki" %}
+# Cleaning Instructions for Wiki Format
+- Remove any HTML tags or syntax that was not properly converted
+- Fix formatting issues with headers, lists, tables, and other wiki elements
+- Remove any double brackets from links like [[[[link]]]] -> [[link]]
+- Fix spacing and line break issues
+- Ensure section headings have proper format (e.g., "== Section Title ==" not "==Section Title==")
+- Remove any artifacts like "&nbsp;", "&lt;", "&gt;", etc.
+- Clean up table formatting to proper Wiki syntax
+- Remove any HTML comments <!-- ... -->
+- Fix citation and reference formatting
+- Fix any malformed lists
+
+{% elif format == "markdown" or format == "md" %}
+# Cleaning Instructions for Markdown Format
+- Remove any HTML tags that don't serve a formatting purpose
+- Fix header formatting (ensure proper spacing after # symbols)
+- Clean up list formatting (ensure proper indentation)
+- Fix link formatting ([text](url))
+- Fix table formatting
+- Remove any HTML comments <!-- ... -->
+- Fix code block formatting
+- Ensure consistent line breaks
+
+{% elif format == "html" %}
+# Cleaning Instructions for HTML Format
+- Fix any unclosed tags
+- Remove redundant tags
+- Remove unnecessary attributes from tags
+- Fix indentation and formatting
+- Remove comments that aren't necessary
+- Fix any malformed links
+- Fix table structure if broken
+- Ensure proper document structure (head, body, etc.)
+
+{% elif format == "latex" or format == "tex" %}
+# Cleaning Instructions for LaTeX Format
+- Fix command syntax and braces
+- Fix math environments
+- Remove redundant commands
+- Fix section and subsection formatting
+- Fix list environments
+- Fix table environments
+- Remove unnecessary packages
+
+{% else %}
+# Cleaning Instructions
+- Remove any leftover markup tags or syntax
+- Fix formatting issues with headers, lists, tables
+- Fix spacing and line break issues
+- Remove any character entities (&nbsp;, &lt;, etc.)
+- Fix any malformed links or references
+- Ensure consistent formatting throughout
+{% endif %}
+
+General guidelines:
+- DO NOT add or remove actual content, only clean up formatting and remove artifacts
+- Preserve all meaningful links, references, citations, and structural elements
+- DO NOT add any comments or explanations to the text itself
+- Focus on removing conversion artifacts while maintaining the document's structure and meaning
+- Preserve mathematical formulas, they are important
+- Keep the same general layout and hierarchy of information
+
+# RESPONSE FORMAT
+You must return a valid JSON response without any additional explanation or commentary.
+The JSON structure should be:
+```json
+{
+  "cleaned_text": "YOUR CLEANED TEXT HERE", 
+  "format": "{{ format }}",
+  "success": true,
+  "metadata": {
+    "cleaned_artifacts": ["list", "of", "types", "of", "artifacts", "cleaned"]
+  }
+}
+```
+
+The "cleaned_artifacts" field should list the types of artifacts you removed (e.g., "html_tags", "extra_brackets", "incorrect_headings", etc.).
+
+Text to clean:
+
+{{ text }}

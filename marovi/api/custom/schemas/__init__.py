@@ -8,6 +8,7 @@ from .requests import (
     TranslationRequest,
     FormatConversionRequest,
     SummarizationRequest,
+    CleanTextRequest,
     SupportedFormat,
     SummaryStyle,
 )
@@ -16,6 +17,7 @@ from .responses import (
     TranslationResponse,
     FormatConversionResponse,
     SummarizationResponse,
+    CleanTextResponse,
 )
 
 # Export all schemas
@@ -24,10 +26,12 @@ __all__ = [
     "TranslationRequest",
     "FormatConversionRequest",
     "SummarizationRequest",
+    "CleanTextRequest",
     # Response schemas
     "TranslationResponse",
     "FormatConversionResponse",
     "SummarizationResponse",
+    "CleanTextResponse",
     # Enums
     "SupportedFormat",
     "SummaryStyle",

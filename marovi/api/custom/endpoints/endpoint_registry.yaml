@@ -40,6 +40,25 @@ endpoints:
       uses_llm: true
       supports_batch: false
 
+  # Text Cleaning Endpoint
+  clean_text:
+    name: "Text Cleaner"
+    description: "Clean text from artifacts, leftover tags, and other unwanted elements"
+    implementation: "CleanText"
+    base_class: "CustomEndpoint"
+    input_schema: marovi.api.custom.schemas.CleanTextRequest
+    output_schema: marovi.api.custom.schemas.CleanTextResponse
+    capabilities:
+      - text_cleaning
+    supported_providers:
+      - openai
+      - anthropic
+    prompts:
+      template: "clean_text.jinja"
+    metadata:
+      uses_llm: true
+      supports_batch: false
+
   # Text Summarization endpoint
   summarize:
     class: marovi.api.custom.endpoints.summarize.Summarizer

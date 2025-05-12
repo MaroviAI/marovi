@@ -60,6 +60,24 @@ class FormatConversionRequest(BaseModel):
     class Config:
         use_enum_values = True  # Use string values when serializing enums
 
+# Clean text request
+class CleanTextRequest(BaseModel):
+    """
+    Request schema for text cleaning.
+    
+    This model defines the input parameters for cleaning text from artifacts and unwanted elements.
+    """
+    text: str = Field(..., description="The text content to clean")
+    format: SupportedFormat = Field(..., description="The format of the text to clean")
+    remove_html_artifacts: bool = Field(True, description="Whether to remove HTML artifacts from the text")
+    preserve_structure: bool = Field(True, description="Whether to preserve document structure")
+    preserve_links: bool = Field(True, description="Whether to preserve links in the text")
+    preserve_images: bool = Field(True, description="Whether to preserve image references")
+    options: Optional[Dict[str, Any]] = Field(None, description="Additional options for the cleaning process")
+    
+    class Config:
+        use_enum_values = True  # Use string values when serializing enums
+
 # Summarization request
 class SummarizationRequest(BaseModel):
     """

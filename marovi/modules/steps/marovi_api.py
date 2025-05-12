@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 InputType = TypeVar('InputType')
 OutputType = TypeVar('OutputType')
 
+__all__ = [
+    'MaroviAPIStep', 
+    'TranslateStep', 
+    'LLMTranslateStep', 
+    'SummarizeStep', 
+    'CompleteStep', 
+    'ConvertFormatStep',
+    'CleanTextStep'
+]
 
 class MaroviAPIStep(PipelineStep[InputType, OutputType], Generic[InputType, OutputType]):
     """
@@ -339,4 +348,48 @@ def ConvertFormatStep(source_format: str, target_format: str,
         output_field="converted_text",
         batch_size=batch_size,
         step_id=step_id or f"convert_{source_format}_to_{target_format}"
+    )
+
+
+def CleanTextStep(format_value: str, remove_html_artifacts: bool = True,
+                 preserve_structure: bool = True, preserve_links: bool = True,
+                 preserve_images: bool = True, provider: str = "openai", 
+                 temperature: float = 0.1, batch_size: int = 5,
+                 step_id: Optional[str] = None) -> MaroviAPIStep[str, Dict[str, str]]:
+    """
+    Create a step that cleans text from artifacts and leftover markup using the MaroviAPI custom text cleaner.
+    
+    Args:
+        format_value: Format of the text to clean (e.g., "wiki", "markdown", "html")
+        remove_html_artifacts: Whether to remove HTML artifacts from the text
+        preserve_structure: Whether to preserve document structure
+        preserve_links: Whether to preserve links
+        preserve_images: Whether to preserve image references
+        provider: LLM provider to use (e.g., "openai", "anthropic")
+        temperature: Sampling temperature for the LLM
+        batch_size: Number of items to process in a batch
+        step_id: Optional unique identifier for this step
+        
+    Returns:
+        A configured MaroviAPIStep for text cleaning
+    """
+    return MaroviAPIStep(
+        service="custom",
+        endpoint="clean_text",
+        endpoint_kwargs={
+            "format": format_value,
+            "remove_html_artifacts": remove_html_artifacts,
+            "preserve_structure": preserve_structure,
+            "preserve_links": preserve_links,
+            "preserve_images": preserve_images,
+            "provider": provider,
+            "options": {
+                "temperature": temperature,
+                "structured_response": True
+            }
+        },
+        input_field="text",
+        output_field="cleaned_text",
+        batch_size=batch_size,
+        step_id=step_id or f"clean_{format_value}_text"
     )
