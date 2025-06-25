@@ -202,6 +202,12 @@ class LLMTranslate(CustomEndpoint):
             # Create a translation instruction
             instruction = kwargs.get('instruction') or self._create_translation_instruction(source_lang, target_lang)
             
+            # Ensure text is a string (handle list input if needed)
+            if isinstance(text, list):
+                text = "\n".join([str(item) for item in text])
+            elif not isinstance(text, str):
+                text = str(text)
+            
             # Use the provided LLM client to translate
             response = self.llm_client.complete(
                 instruction + "\n\n" + text,

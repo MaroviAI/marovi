@@ -105,92 +105,80 @@ class MaroviAPIStep(PipelineStep[InputType, OutputType], Generic[InputType, Outp
     
     def process(self, inputs: List[InputType], context: PipelineContext) -> List[OutputType]:
         """
-        Process inputs using the specified MaroviAPI endpoint.
-        
-        This method handles different input types (single values or objects) and
-        automatically chooses the most efficient processing strategy based on the
-        available endpoint variants (batch, async, etc.).
+        Process a batch of inputs using a Marovi API endpoint.
         
         Args:
-            inputs: List of input items
+            inputs: List of inputs to process
             context: Pipeline context
             
         Returns:
-            List of output items from the API
+            List of outputs
         """
-        if not inputs:
-            logger.warning(f"{self.step_id}: No inputs provided")
-            return []
+        logger.info(f"{self.step_id}: Processing {len(inputs)} items {self.process_mode}ly")
         
-        # Determine if inputs are simple values or complex objects
-        use_simple_input = not isinstance(inputs[0], dict)
+        # Ensure API client is initialized
+        if self.client is None:
+            self.client = MaroviAPI()
         
-        # Handle batch endpoint if available and appropriate
-        if self.has_batch and len(inputs) > 1:
-            logger.info(f"{self.step_id}: Using batch endpoint for {len(inputs)} items")
-            return self._process_batch(inputs, use_simple_input, context)
-        
-        # Handle individual processing (with or without async)
-        logger.info(f"{self.step_id}: Processing {len(inputs)} items individually")
-        return self._process_individual(inputs, use_simple_input, context)
-    
-    def _process_batch(self, inputs: List[InputType], use_simple_input: bool, 
-                      context: PipelineContext) -> List[OutputType]:
-        """Process inputs using the batch endpoint."""
-        try:
-            # Prepare batch inputs
-            if use_simple_input:
-                # For simple inputs like strings, prepare a list for the input field
-                batch_inputs = {self.input_field: [item for item in inputs]}
-                batch_inputs.update(self.endpoint_kwargs)
-            else:
-                # For dict inputs, merge with endpoint_kwargs
-                batch_inputs = [{**item, **self.endpoint_kwargs} for item in inputs]
-            
-            # Call the batch endpoint
-            batch_results = self.batch_method(**batch_inputs)
-            
-            # Extract outputs based on output_field
-            if self.output_field and isinstance(batch_results, list) and batch_results:
-                if isinstance(batch_results[0], dict):
-                    return [result.get(self.output_field) for result in batch_results]
-            
-            return batch_results
-            
-        except Exception as e:
-            logger.error(f"{self.step_id}: Batch processing failed: {str(e)}")
-            # Fall back to individual processing
-            logger.info(f"{self.step_id}: Falling back to individual processing")
-            return self._process_individual(inputs, use_simple_input, context)
-    
-    def _process_individual(self, inputs: List[InputType], use_simple_input: bool,
-                           context: PipelineContext) -> List[OutputType]:
-        """Process inputs individually."""
         results = []
         
-        for item in inputs:
+        # Get the service and endpoint functions
+        service = getattr(self.client, self.service, None)
+        if service is None:
+            raise ValueError(f"Service '{self.service}' not found in API client")
+        
+        endpoint_fn = getattr(service, self.endpoint, None)
+        if endpoint_fn is None:
+            raise ValueError(f"Endpoint '{self.endpoint}' not found in service '{self.service}'")
+        
+        # Process each input
+        for input_item in inputs:
             try:
-                # Prepare input for the endpoint
-                if use_simple_input:
-                    # For simple inputs like strings
-                    kwargs = {self.input_field: item, **self.endpoint_kwargs}
+                # Prepare the endpoint arguments
+                kwargs = self.endpoint_kwargs.copy() if self.endpoint_kwargs else {}
+                
+                # Extract input field from the input item
+                if self.input_field:
+                    if isinstance(input_item, dict):
+                        input_value = input_item.get(self.input_field)
+                    else:
+                        input_value = input_item
+                    
+                    # Add to kwargs
+                    kwargs[self.input_field] = input_value
+                    logger.debug(f"{self.step_id}: Input: {input_value[:100]}{'...' if len(str(input_value)) > 100 else ''}")
+                elif isinstance(input_item, dict):
+                    # Use the entire dictionary as kwargs
+                    kwargs.update(input_item)
                 else:
-                    # For dict inputs, merge with endpoint_kwargs
-                    kwargs = {**item, **self.endpoint_kwargs}
+                    # Use the item directly
+                    kwargs['text'] = input_item
+                    logger.debug(f"{self.step_id}: Input: {input_item[:100]}{'...' if len(str(input_item)) > 100 else ''}")
+                
+                # Log the request
+                logger.debug(f"{self.step_id}: Request to {self.service}.{self.endpoint}: {kwargs}")
                 
                 # Call the endpoint
-                result = self.endpoint_method(**kwargs)
+                response = endpoint_fn(**kwargs)
                 
-                # Extract output if needed
-                if self.output_field and isinstance(result, dict):
-                    result = result.get(self.output_field)
+                # Log the response
+                logger.debug(f"{self.step_id}: Response: {response}")
                 
-                results.append(result)
-                
+                # Extract output field from response
+                if self.output_field:
+                    if isinstance(response, dict):
+                        output_value = response.get(self.output_field)
+                        results.append(output_value)
+                    else:
+                        logger.error(f"{self.step_id}: Cannot extract '{self.output_field}' from non-dict response: {response}")
+                        raise ValueError(f"Cannot extract '{self.output_field}' from non-dict response")
+                else:
+                    # Use the entire response
+                    results.append(response)
+                    
             except Exception as e:
                 logger.error(f"{self.step_id}: Processing item failed: {str(e)}")
-                # Append None or a default error value
-                results.append(None)
+                raise
         
         return results
 

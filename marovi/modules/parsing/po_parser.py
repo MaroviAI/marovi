@@ -90,7 +90,18 @@ class POParser(BaseParser):
             output_file: Path to output PO file
             translations: List of translated texts
         """
-        if len(translations) != len(self.entries):
+        # If there are no entries, just save the empty PO file
+        if not self.entries:
+            self.po_file.save(output_file)
+            return
+            
+        # If there are entries but no translations, treat as a copy operation
+        if not translations:
+            self.po_file.save(output_file)
+            return
+            
+        # Validate matching lengths only if both are non-empty
+        if translations and self.entries and len(translations) != len(self.entries):
             raise ValueError(f"Number of translations ({len(translations)}) must match number of entries ({len(self.entries)})")
 
         # Update translations in the PO file
