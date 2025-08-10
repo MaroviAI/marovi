@@ -6,12 +6,14 @@ This module provides custom endpoints that extend the Marovi API functionality.
 
 # Import from schemas module, not directly from schemas.py which is deleted
 from .schemas import (
-    TranslationRequest, 
+    TranslationRequest,
     TranslationResponse,
     FormatConversionRequest,
     FormatConversionResponse,
     SummarizationRequest,
     SummarizationResponse,
+    CleanTextRequest,
+    CleanTextResponse,
     SupportedFormat,
     SummaryStyle
 )
@@ -34,6 +36,9 @@ from .endpoints.summarize import (
     SummarizationError
 )
 
+# Import text cleaner
+from .endpoints.clean_text import CleanText
+
 # Import registry functionality
 from .core.registry import (
     register_endpoint,
@@ -49,11 +54,14 @@ __all__ = [
     # Format converter
     "FormatConverter",
     "FormatConversionError",
-    
+
     # Summarizer
     "Summarizer",
     "SummarizationError",
-    
+
+    # Text cleaner
+    "CleanText",
+
     # Registry functionality
     "register_endpoint",
     "register_default_endpoints",
@@ -66,6 +74,8 @@ __all__ = [
     "FormatConversionResponse",
     "SummarizationRequest",
     "SummarizationResponse",
+    "CleanTextRequest",
+    "CleanTextResponse",
     "SupportedFormat",
     "SummaryStyle"
 ]
