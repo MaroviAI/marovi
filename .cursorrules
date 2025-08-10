@@ -1,0 +1,90 @@
+Marovi AI – Cursor Rules
+
+Audience: AI coding assistants and contributors working in Cursor
+
+Overview
+- Project: Multilingual AI engine with unified access to LLM and translation providers.
+- Stack: Python (>=3.10,<4.0), Poetry, Pydantic v2, optional pydantic-settings, YAML registries.
+- Entry points: `marovi/api` (clients, providers, custom endpoints). Library-first; no web server here.
+
+Important modules and patterns
+- `marovi/api/core/`
+  - `router.py`: Service discovery and instantiation. Maintains client cache and custom endpoint proxy. Avoid circular imports.
+  - `client.py`: Public `MaroviAPI` wrapper around `Router`. Registers default providers and custom registry on init.
+  - `base.py`: Core service types (`ServiceType`). Do not change enum values.
+- `marovi/api/providers/`
+  - Concrete provider implementations for OpenAI, Anthropic, Google (LLM and Translate), DeepL. Use lazy imports.
+  - `provider_registry.py` and `registry.yaml`: Provider registry and metadata. Preserve structure and serialization format.
+  - `__init__.py` exposes `register_default_providers` to pre-register providers on client init.
+- `marovi/api/clients/`
+  - `llm.py`, `translation.py`, `custom.py`: High-level clients. Keep public APIs stable. Respect retry config and streaming patterns.
+- `marovi/api/custom/`
+  - Custom endpoints system: `core/` (base + registry), `endpoints/` (implementations), `prompts/` (Jinja + YAML registry), `README.md` (authoring guide).
+- `marovi/api/schemas/`
+  - Pydantic v2 models for requests/responses (e.g., `LLMRequest`, `TranslationRequest`). Maintain field names and defaults.
+- `marovi/api/config.py`
+  - `settings` from pydantic-settings if available; falls back to `SimpleSettings`. Always source configuration through this module.
+
+How to run
+- Setup: `poetry install` (uses `.venv/` by default if configured) 
+- Tests: `poetry run pytest -q`
+- Example (local): `poetry run python dev/arxiv_download_example.py`
+
+Environment
+- Prefer `marovi.api.config.settings` and helpers (`get_api_key`, `get_default_model`).
+- Do not call `os.getenv` directly from business logic; use config module.
+- Expected keys (as available): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`, `DEEPL_API_KEY`, unified `MAROVI_API_KEY`.
+
+Editing principles for AI
+- Minimize surface area: prefer small, surgical edits; avoid large refactors unless asked.
+- Preserve public APIs: do not change function/class names or signatures in `clients/`, `core/`, or `schemas/` without explicit instruction.
+- Respect lazy import patterns to avoid circular imports (see `providers/__init__.py`, `router.py`).
+- Maintain `__all__` exports and registry updates where applicable.
+- Type safety: add/maintain type hints for public functions/classes; use `pydantic` models for IO; avoid `Any` where possible.
+- Control flow: prefer early returns; handle error/edge cases first; avoid deep nesting.
+- Logging: use `logging.getLogger(__name__)`; no print statements in library code.
+- No secrets in code: never inline API keys; rely on `settings`.
+- Testing: when adding features, add unit tests under `marovi/tests` (or create if missing) and ensure `pytest` passes.
+
+Common tasks and where to edit
+- Add a new custom endpoint
+  1) Define request/response models in `marovi/api/custom/schemas/`
+  2) Implement endpoint in `marovi/api/custom/endpoints/<name>.py` (subclass appropriate base, e.g., `CustomEndpoint`)
+  3) Register it in `marovi/api/custom/core/registry.py` (or via `endpoint_registry.yaml` if used by the endpoint) and update `marovi/api/custom/__init__.py` exports if needed
+  4) Add prompt template(s) under `marovi/api/custom/prompts/` and update the prompt registry YAML
+- Add a new provider
+  1) Create a provider class in `marovi/api/providers/<provider>.py` subclassing `LLMProvider` or `TranslationProvider`
+  2) Wire into `providers/__init__.py` via a `get_<provider>_provider()` accessor and/or update `register_default_providers`
+  3) Ensure provider metadata in `provider_registry.py`/`registry.yaml` is updated if required
+  4) Access via `MaroviAPI().get_service(ServiceType.LLM/TRANSLATION, provider="<id>")`
+- Extend schemas or clients
+  - Update `marovi/api/schemas/*` with new fields, keeping backward compatibility
+  - Update `clients/*` to consume new fields; document defaults and maintain retry/streaming behavior
+
+Style and formatting
+- Follow repository conventions (no formatter config is enforced yet). If formatting is needed, prefer Black/ruff conventions but do not introduce new tools unless requested.
+- Keep lines reasonably wrapped; avoid gratuitous reformatting of unrelated code in edits.
+
+Gotchas
+- Circular imports: keep provider imports lazy and avoid top-level cross-imports between `core`, `providers`, and `custom`.
+- Client caching: `Router` caches clients by key; ensure cache keys stay stable if adding parameters.
+- Default providers: `MaroviAPI` attempts to register defaults; missing provider deps should degrade gracefully (log warning, not crash).
+
+Security & privacy
+- Treat `.env` and any keys as sensitive; never print or log secrets.
+- Do not fetch remote assets during tests.
+
+Review checklist for AI before finalizing an edit
+- Are public APIs unchanged (unless explicitly requested)?
+- Are imports structured to avoid cycles? Any new import must be lazy if it crosses package layers.
+- Do new/changed Pydantic models include `Field` metadata and sensible defaults?
+- Are errors handled with informative exceptions/messages or result objects?
+- Do docs/comments reflect the change? If adding features, include short docstrings.
+
+Prompts you can use in this repo (examples)
+- "Add a new custom endpoint named 'my_endpoint' that converts text to JSON per schema X"
+- "Introduce a provider for ProviderX; implement translate() and list_models() with retries"
+- "Update LLMRequest to support top_k and wire it through llm client with default=50"
+
+Notes
+- This project is library-first. If you add a server or CLI, keep it isolated (e.g., `marovi/server` or `marovi/cli`) and avoid coupling core APIs to frameworks. 

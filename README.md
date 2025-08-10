@@ -29,3 +29,7 @@ This is the same infrastructure used by marovi.ai to:
 Marovi API is fully open source. Our goal is to make AI infrastructure transparent, extensible, and easy to adopt—whether hosted by us or deployed independently. Enterprises can rely on the same tools we use, with full visibility and no lock-in.
 
 We welcome contributions and are actively growing the ecosystem.
+
+---
+
+For development with the Cursor AI IDE, see `docs/cursor.md` and the repository-level `.cursorrules`.

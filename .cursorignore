@@ -1,0 +1,45 @@
+# Keep Cursor context focused; exclude heavy/generated/local-only files
+
+# VCS
+.git/
+
+# Virtual envs and caches
+.venv/
+__pycache__/
+.ruff_cache/
+.pytype/
+.pyre/
+.mypy_cache/
+.hypothesis/
+.pytest_cache/
+
+# Build artifacts
+build/
+dist/
+.eggs/
+*.egg-info/
+wheels/
+site/
+
+# Lock files
+poetry.lock
+
+# Data and checkpoints
+checkpoints/
+data/
+
+# Notebooks and temp
+.ipynb_checkpoints/
+
+# Local dev scripts and assets
+dev/
+tutorials/
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+*.env
+.env.* 
