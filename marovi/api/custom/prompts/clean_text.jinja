@@ -2,6 +2,9 @@ You are an expert in text cleaning and formatting. Your task is to clean up the 
 
 {% if format == "wiki" %}
 # Cleaning Instructions for Wiki Format
+- The text originates from HTML converted with Pandoc. Ensure the final output is valid MediaWiki syntax.
+- Preserve **all** original English prose and mathematical content; do not translate or remove any material.
+- Ensure equations remain intact and wrapped in proper `<math>` tags when needed.
 - Remove any HTML tags or syntax that was not properly converted
 - Fix formatting issues with headers, lists, tables, and other wiki elements
 - Remove any double brackets from links like [[[[link]]]] -> [[link]]

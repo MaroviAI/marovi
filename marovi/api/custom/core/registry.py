@@ -210,3 +210,12 @@ def register_default_endpoints(registry=None):
         logger.debug("Registered Summarizer endpoint")
     except (ImportError, Exception) as e:
         logger.warning(f"Failed to register Summarizer endpoint: {str(e)}")
+
+    # Register CleanText endpoint
+    try:
+        from ..endpoints.clean_text import CleanText
+        cleaner = CleanText()
+        registry.register_endpoint("clean_text", cleaner)
+        logger.debug("Registered CleanText endpoint")
+    except (ImportError, Exception) as e:
+        logger.warning(f"Failed to register CleanText endpoint: {str(e)}")

@@ -22,6 +22,16 @@ templates:
     output_fields:
       schema: "format_conversion.FormatConversionResponse"
 
+  # Text Cleaning Templates
+  clean_text:
+    file: "clean_text.jinja"
+    description: "Template for cleaning markup and removing artifacts from Pandoc-converted HTML"
+    input_fields:
+      schema: "clean_text.CleanTextRequest"
+    output_format: "json"
+    output_fields:
+      schema: "clean_text.CleanTextResponse"
+
   # Summarization Templates
   summarize:
     file: "summarize.jinja"
