@@ -17,6 +17,10 @@ def get_anthropic_provider():
     from .anthropic import AnthropicProvider
     return AnthropicProvider
 
+def get_litellm_provider():
+    from .litellm import LiteLLMProvider
+    return LiteLLMProvider
+
 def get_google_translate_provider():
     from .google import GoogleTranslateProvider
     return GoogleTranslateProvider
@@ -64,6 +68,15 @@ def register_default_providers(router):
         registered_any_provider = True
     except Exception as e:
         logger.warning(f"Failed to register OpenAI provider: {e}")
+
+    # Register LiteLLM provider
+    try:
+        LiteLLMProvider = get_litellm_provider()
+        if not inspect.isabstract(LiteLLMProvider):
+            router.add_provider(LiteLLMProvider())
+            registered_any_provider = True
+    except Exception as e:
+        logger.warning(f"Failed to register LiteLLM provider: {e}")
     
     # Register Google Translate provider
     try:
@@ -91,13 +104,35 @@ def register_default_providers(router):
 
 # Create class aliases to make them directly importable 
 # This preserves lazy imports while allowing direct imports like "from ..providers import GoogleTranslateProvider"
-GoogleTranslateProvider = get_google_translate_provider()
-GeminiProvider = get_gemini_provider()
-OpenAIProvider = get_openai_provider()
-AnthropicProvider = get_anthropic_provider()
-DeepLProvider = get_deepl_provider()
-GoogleTranslateRestProvider = get_google_translate_rest_provider()
-GeminiRestProvider = get_gemini_rest_provider()
+try:
+    GoogleTranslateProvider = get_google_translate_provider()
+except Exception:  # pragma: no cover - provider optional in tests
+    GoogleTranslateProvider = None
+try:
+    GeminiProvider = get_gemini_provider()
+except Exception:
+    GeminiProvider = None
+try:
+    OpenAIProvider = get_openai_provider()
+except Exception:  # pragma: no cover
+    OpenAIProvider = None
+try:
+    AnthropicProvider = get_anthropic_provider()
+except Exception:  # pragma: no cover
+    AnthropicProvider = None
+LiteLLMProvider = get_litellm_provider()
+try:
+    DeepLProvider = get_deepl_provider()
+except Exception:
+    DeepLProvider = None
+try:
+    GoogleTranslateRestProvider = get_google_translate_rest_provider()
+except Exception:
+    GoogleTranslateRestProvider = None
+try:
+    GeminiRestProvider = get_gemini_rest_provider()
+except Exception:
+    GeminiRestProvider = None
 
 __all__ = [
     # Base classes
@@ -119,12 +154,14 @@ __all__ = [
     "get_google_translate_rest_provider",
     "get_gemini_rest_provider",
     "get_deepl_provider",
+    "get_litellm_provider",
     
     # Provider classes
     "GoogleTranslateProvider",
     "GeminiProvider",
     "OpenAIProvider",
-    "AnthropicProvider", 
+    "AnthropicProvider",
+    "LiteLLMProvider",
     "DeepLProvider",
     "GoogleTranslateRestProvider",
     "GeminiRestProvider"

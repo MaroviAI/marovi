@@ -1,0 +1,19 @@
+# Example configuration for a LiteLLM proxy server
+# Defines passthrough translation providers and chat models
+
+litellm:
+  api_base: "https://your-gateway.example.com"
+  api_key: "${MAROVI_API_KEY}"
+
+providers:
+  google:
+    type: translate
+    passthrough: "https://translation.googleapis.com/language/translate/v2"
+  deepl:
+    type: translate
+    passthrough: "https://api.deepl.com/v2/translate"
+  chatgpt:
+    type: chat
+    models:
+      - gpt-4o-mini
+      - gpt-4o-2024-08-06
