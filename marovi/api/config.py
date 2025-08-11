@@ -5,7 +5,10 @@ API key management and provider-specific settings.
 """
 
 import os
-import yaml
+try:
+    import yaml
+except Exception:  # pragma: no cover - allow running without PyYAML
+    yaml = None
 from typing import Optional, Dict, Any, List, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -303,8 +306,7 @@ class ServiceConfig:
 
 def load_config(config_path: Optional[str] = None) -> ServiceConfig:
     """Load configuration from file or environment."""
-    if config_path and os.path.exists(config_path):
-        import yaml
+    if config_path and os.path.exists(config_path) and yaml:
         with open(config_path) as f:
             config = yaml.safe_load(f)
     else:

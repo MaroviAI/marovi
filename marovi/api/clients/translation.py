@@ -10,8 +10,7 @@ import logging
 import asyncio
 from typing import List, Dict, Optional, Union, Type, Any
 
-from ..providers.base import TranslationProvider, TranslationRequest, TranslationResponse
-from ..config import get_api_key
+from .. import litellm_gateway
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,11 +22,10 @@ class TranslationError(Exception):
 
 # Valid provider strings
 PROVIDER_GOOGLE = "google"
-PROVIDER_GOOGLE_REST = "google_rest"
 PROVIDER_DEEPL = "deepl"
-PROVIDER_CUSTOM = "custom"
+PROVIDER_CHATGPT = "chatgpt"
 
-VALID_PROVIDERS = [PROVIDER_GOOGLE, PROVIDER_GOOGLE_REST, PROVIDER_DEEPL, PROVIDER_CUSTOM]
+VALID_PROVIDERS = [PROVIDER_GOOGLE, PROVIDER_DEEPL, PROVIDER_CHATGPT]
 
 # Default retry configuration
 DEFAULT_RETRY_CONFIG = {
@@ -103,8 +101,8 @@ class TranslationClient:
     - Retry logic for transient failures
     """
     
-    def __init__(self, provider: str = PROVIDER_GOOGLE, api_key: Optional[str] = None, 
-                custom_provider: Optional[TranslationProvider] = None,
+    def __init__(self, provider: str = PROVIDER_GOOGLE, api_key: Optional[str] = None,
+                custom_provider: Optional[Any] = None,
                 retry_config: Optional[Dict] = None):
         """
         Initialize a translation client.
@@ -123,31 +121,8 @@ class TranslationClient:
         if provider not in VALID_PROVIDERS:
             raise ValueError(f"Unknown provider: {provider}. Valid options are: {VALID_PROVIDERS}")
         
-        # Get API key from config if not provided
-        if api_key is None and provider != PROVIDER_CUSTOM:
-            api_key = get_api_key(provider)
-        
-        # Initialize the provider
-        if custom_provider:
-            self.provider = custom_provider
-        else:
-            if provider == PROVIDER_GOOGLE:
-                from ..providers import GoogleTranslateProvider
-                self.provider = GoogleTranslateProvider(api_key=api_key)
-            elif provider == PROVIDER_GOOGLE_REST:
-                from ..providers import GoogleTranslateRestProvider
-                self.provider = GoogleTranslateRestProvider(api_key=api_key)
-            elif provider == PROVIDER_DEEPL:
-                from ..providers import DeepLProvider
-                self.provider = DeepLProvider(api_key=api_key)
-            elif provider == PROVIDER_CUSTOM:
-                raise ValueError("Custom provider requires a provider implementation")
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
-        
-        # Set retry configuration
+        # API keys are managed by the LiteLLM gateway; keep interface for compatibility
         self.retry_config = retry_config or DEFAULT_RETRY_CONFIG
-        
         logger.info(f"Initialized TranslationClient with provider={provider}")
     
     def _should_retry(self, error: Exception, attempt: int) -> bool:
@@ -220,53 +195,33 @@ class TranslationClient:
             return get_client(provider).translate(text, source_lang, target_lang)
             
         start_time = time.time()
-        
-        # Prepare request
-        request = TranslationRequest(
-            text=text,
-            source_lang=source_lang,
-            target_lang=target_lang,
-            metadata=None
-        )
-        
-        # Track attempts for retry logic
+
         attempt = 1
         max_retries = self.retry_config.get("max_retries", 3)
-        
+
         while True:
             try:
-                # Execute translation
-                response = self.provider.translate(request)
-                
-                # Check for successful response
+                response = litellm_gateway.translate(
+                    provider=self.provider_type,
+                    text=text,
+                    source_lang=source_lang,
+                    target_lang=target_lang,
+                )
                 if not response.success:
                     raise TranslationError(response.error or "Translation failed without specific error")
-                
-                logger.info(f"Translation successful: {self.provider_type}, "
-                            f"source={source_lang}, target={target_lang}, "
-                            f"latency: {time.time() - start_time:.2f}s")
-                
-                # Return translated text
+                logger.info(
+                    f"Translation successful: {self.provider_type}, source={source_lang}, target={target_lang}, latency: {time.time() - start_time:.2f}s"
+                )
                 return response.content
-                
             except Exception as e:
-                # Log error
-                logger.error(f"Translation error: {self.provider_type}, "
-                             f"source={source_lang}, target={target_lang}, "
-                             f"attempt {attempt}/{max_retries}, error: {str(e)}")
-                
-                # Check if we should retry
+                logger.error(
+                    f"Translation error: {self.provider_type}, source={source_lang}, target={target_lang}, attempt {attempt}/{max_retries}, error: {str(e)}"
+                )
                 if self._should_retry(e, attempt):
-                    # Implement backoff before retry
                     self._sync_backoff(attempt)
                     attempt += 1
-                else:
-                    # If this is a known error type or we've exceeded retries, re-raise
-                    if isinstance(e, TranslationError):
-                        raise
-                    else:
-                        # Wrap unknown errors in TranslationError
-                        raise TranslationError(str(e)) from e
+                    continue
+                raise TranslationError(str(e))
     
     async def atranslate(self, 
                         text: Union[str, List[str]], 
@@ -293,52 +248,14 @@ class TranslationClient:
         if provider is not None and provider != self.provider_type:
             return await get_client(provider).atranslate(text, source_lang, target_lang)
             
-        start_time = time.time()
-        
-        # Prepare request
-        request = TranslationRequest(
-            text=text,
-            source_lang=source_lang,
-            target_lang=target_lang,
-            metadata=None
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            self.translate,
+            text,
+            source_lang,
+            target_lang,
         )
-        
-        # Track attempts for retry logic
-        attempt = 1
-        max_retries = self.retry_config.get("max_retries", 3)
-        
-        while True:
-            try:
-                # Execute translation
-                response = await self.provider.atranslate(request)
-                
-                # Check for successful response
-                if not response.success:
-                    raise TranslationError(response.error or "Translation failed without specific error")
-                
-                logger.info(f"Async translation successful: {self.provider_type}, "
-                            f"source={source_lang}, target={target_lang}, "
-                            f"latency: {time.time() - start_time:.2f}s")
-                
-                # Return translated text
-                return response.content
-                
-            except Exception as e:
-                # Log error
-                logger.error(f"Async translation failed after {attempt} attempts: {str(e)}")
-                
-                # Check if we should retry
-                if self._should_retry(e, attempt):
-                    # Implement backoff before retry
-                    await self._backoff(attempt)
-                    attempt += 1
-                else:
-                    # If this is a known error type or we've exceeded retries, re-raise
-                    if isinstance(e, TranslationError):
-                        raise
-                    else:
-                        # Wrap unknown errors in TranslationError
-                        raise TranslationError(str(e)) from e
     
     def batch_translate(self,
                        texts: List[str],
@@ -367,34 +284,8 @@ class TranslationClient:
         if provider is not None and provider != self.provider_type:
             return get_client(provider).batch_translate(texts, source_lang, target_lang, max_concurrency)
             
-        batch_start_time = time.time()
-        
-        # Prepare requests
-        requests = [
-            TranslationRequest(
-                text=text,
-                source_lang=source_lang,
-                target_lang=target_lang,
-                metadata=None
-            )
-            for i, text in enumerate(texts)
-        ]
-        
-        # Process in batches to respect concurrency limits
-        results = []
-        for i in range(0, len(requests), max_concurrency):
-            batch = requests[i:i + max_concurrency]
-            batch_results = self.provider.batch_translate(batch)
-            results.extend(batch_results)
-        
-        batch_time = time.time() - batch_start_time
-        logger.info(f"Batch translation completed: {self.provider_type}, "
-                   f"source={source_lang}, target={target_lang}, "
-                   f"total_time: {batch_time:.2f}s, batch_size: {len(texts)}")
-        
-        # Extract translated texts from responses
-        translated_texts = [r.content for r in results]
-        return translated_texts
+        results = [self.translate(t, source_lang, target_lang) for t in texts]
+        return results
     
     async def abatch_translate(self,
                              texts: List[str],
@@ -423,38 +314,19 @@ class TranslationClient:
         if provider is not None and provider != self.provider_type:
             return await get_client(provider).abatch_translate(texts, source_lang, target_lang, max_concurrency)
             
-        batch_start_time = time.time()
-        
-        # Prepare requests
-        requests = [
-            TranslationRequest(
-                text=text,
-                source_lang=source_lang,
-                target_lang=target_lang,
-                metadata=None
-            )
-            for i, text in enumerate(texts)
-        ]
-        
-        # Process in batches to respect concurrency limits
-        results = []
-        for i in range(0, len(requests), max_concurrency):
-            batch = requests[i:i + max_concurrency]
-            batch_results = await self.provider.abatch_translate(batch)
-            results.extend(batch_results)
-        
-        batch_time = time.time() - batch_start_time
-        logger.info(f"Async batch translation completed: {self.provider_type}, "
-                   f"source={source_lang}, target={target_lang}, "
-                   f"total_time: {batch_time:.2f}s, batch_size: {len(texts)}")
-        
-        # Extract translated texts from responses
-        translated_texts = [r.content for r in results]
-        return translated_texts
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            self.batch_translate,
+            texts,
+            source_lang,
+            target_lang,
+            max_concurrency,
+        )
     
     def get_supported_languages(self) -> List[str]:
         """Get list of supported language codes."""
-        return self.provider.get_supported_languages()
+        return []
 
 
 def create_translation_client(provider: Optional[str] = None) -> TranslationClient:

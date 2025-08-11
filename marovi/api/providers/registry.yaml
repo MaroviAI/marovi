@@ -31,6 +31,24 @@ providers:
       - "OPENAI_API_KEY"
     docs_url: "https://platform.openai.com/docs/api-reference"
 
+  # LiteLLM provider
+  litellm:
+    name: "LiteLLM"
+    description: "Self-hosted LiteLLM gateway"
+    services:
+      - type: "llm"
+        implementation: "marovi.api.providers.litellm.LiteLLMProvider"
+        default_model: "gpt-4o-mini"
+        models:
+          - name: "gpt-4o-mini"
+            max_tokens: 128000
+            supports_streaming: true
+            supports_json_mode: true
+    env_vars:
+      - "MAROVI_API_KEY"
+      - "LITELLM_API_BASE"
+    docs_url: "https://github.com/BerriAI/litellm"
+
   # Anthropic provider
   anthropic:
     name: "Anthropic"

@@ -42,6 +42,7 @@ DEFAULT_RETRY_CONFIG = {
 class ProviderType(Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
+    LITELLM = "litellm"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
     GEMINI_REST = "gemini_rest"
@@ -187,6 +188,9 @@ class LLMClient:
             # Use lazy import to avoid circular imports
             from marovi.api.providers import get_gemini_rest_provider
             self.provider = get_gemini_rest_provider()()
+        elif provider_str == "litellm":
+            from marovi.api.providers import get_litellm_provider
+            self.provider = get_litellm_provider()()
         else:
             raise ValueError(f"Unsupported provider: {provider_str}")
         

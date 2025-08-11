@@ -5,7 +5,10 @@ ensuring consistent provider initialization and configuration across the API.
 """
 
 import os
-import yaml
+try:
+    import yaml
+except Exception:  # pragma: no cover - fallback when PyYAML is unavailable
+    yaml = None
 from typing import Dict, Any, Optional, Type, Union, List
 from enum import Enum
 
@@ -22,7 +25,7 @@ class ProviderRegistry:
     def _load_registry(self) -> None:
         """Load provider registry data from registry.yaml if it exists, or use defaults."""
         registry_path = os.path.join(os.path.dirname(__file__), "providers", "registry.yaml")
-        if os.path.exists(registry_path):
+        if yaml and os.path.exists(registry_path):
             try:
                 with open(registry_path, 'r') as f:
                     registry_data = yaml.safe_load(f)
@@ -52,6 +55,21 @@ class ProviderRegistry:
                     }
                 ],
                 "env_vars": ["OPENAI_API_KEY"]
+            },
+            "litellm": {
+                "name": "LiteLLM",
+                "description": "Self-hosted LiteLLM gateway",
+                "services": [
+                    {
+                        "type": "llm",
+                        "implementation": "marovi.api.providers.litellm.LiteLLMProvider",
+                        "default_model": "gpt-4o-mini",
+                        "models": [
+                            {"name": "gpt-4o-mini", "max_tokens": 128000}
+                        ]
+                    }
+                ],
+                "env_vars": ["MAROVI_API_KEY", "LITELLM_API_BASE"]
             },
             "anthropic": {
                 "name": "Anthropic",
@@ -177,6 +195,9 @@ class ProviderRegistry:
                         elif provider_id == "custom" and service_type == "translation":
                             from .custom import ChatGPTTranslationProvider
                             return ChatGPTTranslationProvider
+                        elif provider_id == "litellm" and service_type == "llm":
+                            from .litellm import LiteLLMProvider
+                            return LiteLLMProvider
                         return None
         return None
     

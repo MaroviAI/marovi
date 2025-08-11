@@ -10,11 +10,21 @@ from .core.base import ServiceType
 
 # Import provider registry and config before other modules that might need them
 from .providers.provider_registry import provider_registry
-from .config import ProviderType, get_api_key, get_default_model, get_provider_features, settings
+from .config import (
+    ProviderType,
+    get_api_key,
+    get_default_model,
+    get_provider_features,
+    settings,
+)
 
 # Now import router and client module objects
 from .core.router import Router, default_router
 from .core.client import MaroviAPI, default_client, api
+try:  # pragma: no cover - allow missing FastAPI in minimal environments
+    from .server import app as fastapi_app
+except Exception:  # pragma: no cover
+    fastapi_app = None
 
 # Import client classes after router is fully initialized
 from .clients.llm import LLMClient, create_llm_client
@@ -87,6 +97,7 @@ __all__ = [
     "async_cached",
     "Cache",
     "api_key_manager",
+    "fastapi_app",
     
     # Version
     "__version__"
