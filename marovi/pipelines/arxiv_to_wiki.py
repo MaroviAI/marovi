@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 from marovi.modules.download import ArXivDownloader
 from marovi.modules.parsing.pandoc import PandocParser
-from marovi.modules.upload import WikiUploader
+from marovi.modules.wiki import WikiClient
 from marovi.storage.document.paper_storage import PaperStorage
 from marovi.pipelines.core import Pipeline, PipelineStep
 from marovi.pipelines.context import PipelineContext
@@ -92,7 +92,7 @@ class CleanWikiStep(PipelineStep[Dict[str, Any], Dict[str, Any]]):
 class UploadWikiStep(PipelineStep[Dict[str, Any], Dict[str, Any]]):
     """Upload cleaned wiki text to a remote MediaWiki instance."""
 
-    def __init__(self, uploader: WikiUploader, step_id: str | None = None) -> None:
+    def __init__(self, uploader: WikiClient, step_id: str | None = None) -> None:
         super().__init__(step_id=step_id or "upload_wiki")
         self.uploader = uploader
 
@@ -122,5 +122,5 @@ class ArxivToWikiPipeline(Pipeline):
         downloader = DownloadArxivStep(storage)
         html_to_wiki = HTMLToWikiStep()
         clean = CleanWikiStep(provider=provider)
-        uploader = UploadWikiStep(WikiUploader(wiki_api_url))
+        uploader = UploadWikiStep(WikiClient(wiki_api_url))
         super().__init__(steps=[downloader, html_to_wiki, clean, uploader], name="arxiv_to_wiki")

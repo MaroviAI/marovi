@@ -55,7 +55,7 @@ class CleanTextStep:  # simple passthrough stub
 marovi_steps.CleanTextStep = CleanTextStep
 sys.modules.setdefault("marovi.modules.steps.marovi_api", marovi_steps)
 
-from marovi.modules.upload import WikiUploader
+from marovi.modules.wiki import WikiClient
 from marovi.pipelines.arxiv_to_wiki import (
     ArxivToWikiPipeline,
     CleanWikiStep,
@@ -74,7 +74,7 @@ def _mock_response(json_data):
     return resp
 
 
-def test_wiki_uploader_login_and_upload():
+def test_wiki_client_login_and_upload():
     session = Mock()
     session.get.side_effect = [
         _mock_response({"query": {"tokens": {"logintoken": "LOGIN"}}}),
@@ -84,7 +84,7 @@ def test_wiki_uploader_login_and_upload():
         _mock_response({"login": {"result": "Success"}}),
         _mock_response({"edit": {"result": "Success"}}),
     ]
-    uploader = WikiUploader("https://wiki.example/api.php", "user", "pass")
+    uploader = WikiClient("https://wiki.example/api.php", "user", "pass")
     uploader.session = session
     uploader.upload_page("Title", "Content")
     assert uploader.csrf_token == "CSRF"
@@ -102,7 +102,7 @@ def test_wiki_uploader_login_and_upload():
     )
 
 
-def test_wiki_uploader_error_on_upload():
+def test_wiki_client_error_on_upload():
     session = Mock()
     session.get.side_effect = [
         _mock_response({"query": {"tokens": {"logintoken": "LOGIN"}}}),
@@ -112,7 +112,7 @@ def test_wiki_uploader_error_on_upload():
         _mock_response({"login": {"result": "Success"}}),
         _mock_response({"error": {"code": "bad"}}),
     ]
-    uploader = WikiUploader("https://wiki.example/api.php", "user", "pass")
+    uploader = WikiClient("https://wiki.example/api.php", "user", "pass")
     uploader.session = session
     with pytest.raises(RuntimeError):
         uploader.upload_page("Title", "Content")
@@ -158,7 +158,7 @@ def test_clean_wiki_step_runs_and_writes(tmp_path):
 
 
 def test_upload_wiki_step_calls_uploader():
-    uploader = Mock(spec=WikiUploader)
+    uploader = Mock(spec=WikiClient)
     uploader.upload_page.return_value = None
     step = UploadWikiStep(uploader)
     item = {"arxiv_id": "123", "cleaned_text": "text", "metadata": {"title": "Title"}}
